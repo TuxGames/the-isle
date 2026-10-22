@@ -13,7 +13,9 @@ func _ready() -> void:
 	var args := Args.current()
 	if args.has("auto-quit"):
 		var secs := float(args["auto-quit"])
-		get_tree().create_timer(secs).timeout.connect(func(): get_tree().quit(0))
+		get_tree().create_timer(secs).timeout.connect(func():
+			get_tree().root.propagate_notification(NOTIFICATION_WM_CLOSE_REQUEST)
+			get_tree().quit(0))
 
 	if args.has("test-client"):
 		var scenario: Node = load("res://tests/net_scenario.gd").new()

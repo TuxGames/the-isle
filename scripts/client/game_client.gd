@@ -579,8 +579,33 @@ func _take_screenshot(path: String) -> void:
 	print("print salvo em ", path)
 
 
+func _ready() -> void:
+	# Quem fecha o jogo somos nós (ver _notification): primeiro sai do servidor
+	# pra ele salvar o dino, depois fecha o servidor local (se tiver) e o jogo.
+	get_tree().set_auto_accept_quit(false)
+
+
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_EXIT_TREE:
-		if _server_pid > 0:
-			OS.kill(_server_pid)
-			_server_pid = -1
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quit_game()
+	elif what == NOTIFICATION_EXIT_TREE and _server_pid > 0:
+		OS.kill(_server_pid)
+		_server_pid = -1
+
+
+var _quitting := false
+
+
+func _quit_game() -> void:
+	if _quitting:
+		return
+	_quitting = true
+	var was_online := in_game
+	Net.disconnect_from_server()
+	if _server_pid > 0:
+		# Dá tempo do servidor local perceber a saída e salvar antes de fechar.
+		if was_online:
+			await get_tree().create_timer(0.8).timeout
+		OS.kill(_server_pid)
+		_server_pid = -1
+	get_tree().quit()

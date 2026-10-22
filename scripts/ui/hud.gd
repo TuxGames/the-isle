@@ -281,7 +281,7 @@ func _build_pause() -> void:
 	box.add_child(leave)
 	var quit := Button.new()
 	quit.text = "Fechar o jogo"
-	quit.pressed.connect(func(): get_tree().root.propagate_notification(NOTIFICATION_WM_CLOSE_REQUEST); get_tree().quit())
+	quit.pressed.connect(func(): get_tree().root.propagate_notification(NOTIFICATION_WM_CLOSE_REQUEST))
 	box.add_child(quit)
 
 
