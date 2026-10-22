@@ -109,7 +109,7 @@ static func think(world: WorldSim, b: Dino) -> void:
 	# --- 3. Ameaças à vista.
 	var threat: Dino = null
 	var threat_d := INF
-	for o in seen:
+	for o: Dino in seen:
 		if not o.is_carnivore():
 			continue
 		if b.is_carnivore():
@@ -194,7 +194,7 @@ static func _choose_prey(b: Dino, seen: Array) -> Dino:
 	var best: Dino = null
 	var best_score := INF
 	var my_power := b.power()
-	for o in seen:
+	for o: Dino in seen:
 		if o.is_carnivore():
 			if o.species == b.species and b.hunger > 15.0:
 				continue
@@ -330,7 +330,7 @@ static func _wander_destination(world: WorldSim, b: Dino) -> Vector3:
 	if not b.is_carnivore():
 		var sum := Vector3.ZERO
 		var n := 0
-		for o in world.query(b.pos, HERD_RADIUS):
+		for o: Dino in world.query(b.pos, HERD_RADIUS):
 			if o != b and o.species == b.species:
 				sum += o.pos
 				n += 1

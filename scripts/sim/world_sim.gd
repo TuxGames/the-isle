@@ -58,7 +58,7 @@ func new_id() -> int:
 
 func bots() -> Array:
 	var out := []
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if d.is_bot:
 			out.append(d)
 	return out
@@ -66,7 +66,7 @@ func bots() -> Array:
 
 func players() -> Array:
 	var out := []
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if not d.is_bot:
 			out.append(d)
 	return out
@@ -74,7 +74,7 @@ func players() -> Array:
 
 func bot_count() -> int:
 	var n := 0
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if d.is_bot:
 			n += 1
 	return n
@@ -86,7 +86,7 @@ func get_dino(id: int) -> Dino:
 
 func _rebuild_grid() -> void:
 	_grid.clear()
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		var key := Vector2i(floori(d.pos.x / GRID_CELL), floori(d.pos.z / GRID_CELL))
 		if not _grid.has(key):
 			_grid[key] = []
@@ -114,7 +114,7 @@ func query(center: Vector3, radius: float) -> Array:
 ## (design: o jogo favorece o jogador em crescimento).
 func perceive(b: Dino, radius: float) -> Array:
 	var out := []
-	for o in query(b.pos, radius):
+	for o: Dino in query(b.pos, radius):
 		if o == b or not o.alive:
 			continue
 		if not o.is_bot:
@@ -199,13 +199,13 @@ func step(dt: float) -> void:
 	world_time += dt
 	_rebuild_grid()
 
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if d.is_bot:
 			BotBrain.update(self, d, dt)
 
 	_separate_bots()
 
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		Metabolism.step(d, dt)
 		if d.interacting:
 			_interact(d, dt)
@@ -214,7 +214,7 @@ func step(dt: float) -> void:
 
 	_resolve_attacks(dt)
 
-	for d in dinos.values().duplicate():
+	for d: Dino in dinos.values().duplicate():
 		if d.alive and d.health <= 0.0:
 			var cause := "fome e sede" if (d.hunger <= 0.0 or d.thirst <= 0.0) else "ferimentos"
 			var killer: Dino = dinos.get(d.last_attacker_id)
@@ -253,11 +253,11 @@ func _interact(d: Dino, dt: float) -> void:
 
 
 func _separate_bots() -> void:
-	for b in dinos.values():
+	for b: Dino in dinos.values():
 		if not b.is_bot:
 			continue
 		var rb := Species.footprint_radius(b.species, b.growth)
-		for o in query(b.pos, rb + 6.0):
+		for o: Dino in query(b.pos, rb + 6.0):
 			if o == b:
 				continue
 			var ro := Species.footprint_radius(o.species, o.growth)
@@ -363,7 +363,7 @@ func _regrow_bushes(dt: float) -> void:
 func choose_bot_species() -> String:
 	var herb := 0
 	var total := 0
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if d.is_bot:
 			total += 1
 			if not d.is_carnivore():
@@ -423,7 +423,7 @@ func _bot_spawn_point() -> Vector3:
 	for i in 30:
 		var p := terrain.random_land_point(rng)
 		var nearest := INF
-		for pl in ps:
+		for pl: Dino in ps:
 			nearest = minf(nearest, Movement.flat_distance(p, pl.pos))
 		if nearest >= BOT_SPAWN_MIN_PLAYER_DIST:
 			return p
@@ -440,7 +440,7 @@ func _player_spawn_point() -> Vector3:
 	for i in 40:
 		var p := terrain.random_land_point(rng)
 		var nearest_carn := SAFE_SPAWN_DIST * 2.0
-		for d in dinos.values():
+		for d: Dino in dinos.values():
 			if d.is_bot and d.is_carnivore():
 				nearest_carn = minf(nearest_carn, Movement.flat_distance(p, d.pos))
 		var water := Movement.flat_distance(p, terrain.nearest_water_point(p))
@@ -500,7 +500,7 @@ func logout_player(id: int) -> void:
 
 ## Atualiza o registro salvo de todos os jogadores conectados (antes de salvar em disco).
 func snapshot_player_records() -> void:
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if not d.is_bot and d.alive:
 			player_records[d.player_name] = {"alive": true, "dino": d.to_dict()}
 
@@ -510,7 +510,7 @@ func snapshot_player_records() -> void:
 func to_save() -> Dictionary:
 	snapshot_player_records()
 	var bot_list := []
-	for d in dinos.values():
+	for d: Dino in dinos.values():
 		if d.is_bot:
 			bot_list.append(d.to_dict())
 	var carc := []

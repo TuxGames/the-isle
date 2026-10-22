@@ -55,7 +55,8 @@ static func thirst_per_second(d: Dino) -> float:
 
 
 static func step(d: Dino, dt: float) -> void:
-	if not d.alive:
+	# Vida zerada: o mundo mata o bicho neste passo; não pode curar antes disso.
+	if not d.alive or d.health <= 0.0:
 		return
 	var sp := d.spec()
 
