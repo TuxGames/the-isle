@@ -27,7 +27,7 @@ func start(args: Dictionary) -> Error:
 	port = int(args.get("port", GameConfig.DEFAULT_PORT))
 	dev_mode = args.has("dev")
 	if args.has("save"):
-		save_path = String(args["save"])
+		save_path = String(args["save"]).replace("\\", "/")
 	var seed_value := int(args.get("seed", GameConfig.WORLD_SEED))
 	var bots := int(args.get("bots", GameConfig.DEFAULT_BOT_TARGET))
 
