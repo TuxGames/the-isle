@@ -77,7 +77,7 @@ func _generate_heights() -> void:
 			var edge := minf(minf(x, z), minf(SIZE - x, SIZE - z))
 			if edge < BORDER:
 				var t := 1.0 - edge / BORDER
-				h += t * t * 48.0
+				h += smoothstep(0.0, 1.0, t) * 40.0
 
 			# Rio: leito abaixo da água e margens suaves.
 			var d := absf(x - cx)

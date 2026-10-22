@@ -7,7 +7,7 @@ extends Node
 ## Do lado do servidor, as chamadas c_ são repassadas para `server` (GameServer).
 ## Do lado do cliente, as chamadas s_ viram sinais que o jogo escuta.
 
-enum Action { ATTACK = 1, INTERACT_START = 2, INTERACT_STOP = 3, REST_TOGGLE = 4, RESPAWN = 5, DEV = 6 }
+enum Action { ATTACK = 1, INTERACT_START = 2, INTERACT_STOP = 3, REST_TOGGLE = 4, RESPAWN = 5, DEV = 6, CHAT = 7 }
 
 ## Bits de c_state.flags
 const CF_SPRINT := 1

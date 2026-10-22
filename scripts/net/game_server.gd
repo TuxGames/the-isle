@@ -233,6 +233,10 @@ func on_action(peer_id: int, action: int, arg: String) -> void:
 				_respawn(peer_id, arg)
 		Net.Action.DEV:
 			_dev_command(peer_id, d, arg)
+		Net.Action.CHAT:
+			var text := arg.strip_edges().substr(0, 200)
+			if text != "":
+				_broadcast_message("%s: %s" % [peers[peer_id]["name"], text])
 
 
 func _respawn(peer_id: int, species_id: String) -> void:
@@ -290,8 +294,21 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				reply = "Morte forçada"
 			"/bots":
 				reply = "Bots: %d (alvo %d)" % [sim.bot_count(), sim.bot_target]
+			"/spawn":
+				var sp_id := parts[1] if parts.size() > 1 else "dryosaurus"
+				if not Species.is_valid(sp_id):
+					reply = "Espécies: " + ", ".join(Species.IDS)
+				else:
+					var g := float(parts[2]) if parts.size() > 2 else 1.0
+					var b := sim.spawn_bot(sp_id, clampf(g, 0.0, 1.0))
+					# Aparece uns 12 m na frente, um pouco pro lado a cada chamada.
+					var side := d.forward().cross(Vector3.UP) * sim.rng.randf_range(-6.0, 6.0)
+					var p := Terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
+					b.pos = Vector3(p.x, Movement.ground_y(sim.terrain, p.x, p.z, b.body_height()), p.z)
+					b.yaw = d.yaw + PI
+					reply = "%s criado na sua frente" % Species.display_name(sp_id)
 			_:
-				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /kill, /bots"
+				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /kill, /bots, /spawn especie [crescimento]"
 	if reply != "":
 		Net.s_message.rpc_id(peer_id, reply)
 
