@@ -29,8 +29,10 @@ static func update(world: WorldSim, b: Dino, dt: float) -> void:
 	var br := b.brain
 	if not br.has("state"):
 		br["state"] = "wander"
-		br["think_t"] = world.rng.randf() * THINK_INTERVAL
 		br["since"] = world.world_time
+	if not br.has("think_t"):
+		# Espalha as decisões dos bots no tempo pra não pesar tudo no mesmo passo.
+		br["think_t"] = world.rng.randf() * THINK_INTERVAL
 	br["think_t"] = float(br["think_t"]) - dt
 	if float(br["think_t"]) <= 0.0:
 		br["think_t"] = float(br["think_t"]) + THINK_INTERVAL
@@ -259,14 +261,13 @@ static func _act(world: WorldSim, b: Dino, dt: float) -> void:
 			if target == null:
 				_stop(b)
 				return
-			var dist := Movement.flat_distance(b.pos, target.pos)
-			var speed := speeds.y if dist > 5.0 else speeds.x * 0.6
 			if Combat.in_reach(b, target):
 				_face(b, target.pos, dt)
 				_stop(b)
 				world.start_attack(b)
 			else:
-				_steer(world, b, target.pos, speed, dt, 0.0, speed > speeds.x)
+				# Persegue correndo enquanto tiver fôlego (sem fôlego, Movement.speeds iguala).
+				_steer(world, b, target.pos, speeds.y, dt, 0.0, speeds.y > speeds.x)
 		"flee":
 			var threat: Dino = world.get_dino(int(br.get("target_id", 0)))
 			if threat == null:
