@@ -1,0 +1,14 @@
+# Cache do Godot (recriado ao abrir o projeto)
+.godot/
+.import/
+
+# Builds exportados
+/build/
+
+# Saves e logs de teste locais
+/tmp/
+*.log
+
+export_credentials.cfg
+.DS_Store
+Thumbs.db
