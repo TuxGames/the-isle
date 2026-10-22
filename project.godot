@@ -1,0 +1,28 @@
+; Projeto Godot 4 — jogo de sobrevivência com dinossauros (nome provisório).
+; Abra este arquivo pelo Godot 4.7.x (Importar → selecionar project.godot).
+
+config_version=5
+
+[application]
+
+config/name="Dino Survival (nome provisório)"
+config/description="Jogo de sobrevivência com dinossauros para até 5 amigos, inspirado em The Isle."
+config/version="0.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="DinoSurvival"
+config/features=PackedStringArray("4.7")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Net="*res://scripts/net/net.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=1
