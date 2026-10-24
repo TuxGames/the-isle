@@ -44,7 +44,11 @@ headless e rápido (`tests/run_tests.gd`).
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
 - `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots.
+  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população.
+- Diretor de população (`sim/population_director.gd`, valores em `config.gd`): agrupa os
+  jogadores, conta os bots na área de cada grupo e decide onde e qual espécie nasce na
+  reposição (`WorldSim.spawn_bot`). A cada 5 s muda de lugar alguns bots congelados longe de
+  todos pra área com falta de bots. Sem jogador no mundo não faz nada.
 
 ## Protocolo (scripts/net/net.gd)
 

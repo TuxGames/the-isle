@@ -45,8 +45,8 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | **Hitbox plausível**: só toma dano se a mordida realmente acertar | ✅ |
 | A maioria dos bots fica congelada (longe dos jogadores) | 🟡 congelamento pronto (ver seção 5). No mapa de 512 m quase nada fica longe o bastante; com 2 km e 70 bots, 40 a 66 ficam congelados (`--bench --map-size=2048`) |
 | **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 |
-| Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ⬜ |
-| Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ⬜ |
+| Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ✅ diretor de população: cada grupo de jogadores (a até 200 m um do outro) quer 60% da população dividida pelo número de grupos, na área de 260 m em volta. Age na reposição e mudando de lugar bots congelados que ninguém vê. Números provisórios. No mapa de 512 m quase nada congela, então hoje só a reposição age |
+| Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ✅ "com fome" = fome abaixo de 50; "herbívoro demais" = mais de 80% da área. A proporção geral só sai 10% dos 65/35. Números provisórios |
 
 ## 4. IA
 
@@ -175,6 +175,10 @@ página, coleção `respostas`, documento `marcelo`. Quando chegarem, passe as d
 - Tamanho do mapa final (pergunta 1 do questionário: 1, 2 ou 4 km). O código já aceita
   qualquer um; falta a escolha. Depois disso sobe o padrão de bots pra ~70 (roadmap v0.2, etapa 3).
 - Tamanho da "célula" do exemplo das distâncias. Usamos 32 m (160 / 320 / 480 m). Está bom?
+- Números do diretor de população (provisórios, em `config.gd`): o que é "juntos" (200 m),
+  o tamanho da área de cada grupo (260 m), quanto da população fica perto dos jogadores (60%),
+  o que é "com fome" (abaixo de 50) e "herbívoro demais" (mais de 80% da área), e quanto a
+  proporção geral pode sair dos 65/35 por causa disso (10%).
 - Equilíbrio: na v0.1 um triceratops adulto mata um carnotauro adulto parado com 6 chifradas
   na cabeça. Está bom assim?
 - Ciclo de dia e noite (não foi discutido).

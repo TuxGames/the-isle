@@ -18,8 +18,9 @@
 1. ✅ **Congelar bots longe dos jogadores** (faixas de distância do Marcelo, contando o jogador
    mais próximo; histerese pra não ficar liga/desliga na borda). No mapa de 512 m quase não
    congela nada: o ganho aparece com o mapa maior (etapa 3). `/bots` mostra as faixas.
-2. **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
-   separados; carnívoros com fome → mais herbívoros na área.
+2. ✅ **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
+   separados; carnívoros com fome → mais herbívoros na área. Age na reposição e mudando de lugar
+   bots congelados; no mapa de 512 m só a reposição age (quase nada congela).
 3. 🟡 **Aumentar o mapa** e subir o padrão pra ~70 bots. Pronto: tamanho configurável no
    servidor (`--map-size=2048`), terreno desenhado por partes no cliente, save que lembra o
    tamanho. Falta o Marcelo escolher o tamanho (questionário, pergunta 1) pra trocar o padrão
