@@ -18,9 +18,13 @@
 1. ✅ **Congelar bots longe dos jogadores** (faixas de distância do Marcelo, contando o jogador
    mais próximo; histerese pra não ficar liga/desliga na borda). No mapa de 512 m quase não
    congela nada: o ganho aparece com o mapa maior (etapa 3). `/bots` mostra as faixas.
-2. **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
-   separados; carnívoros com fome → mais herbívoros na área.
-3. Subir o padrão pra ~70 bots e aumentar o mapa (precisa da etapa 1).
+2. ✅ **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
+   separados; carnívoros com fome → mais herbívoros na área. Age na reposição e mudando de lugar
+   bots congelados; no mapa de 512 m só a reposição age (quase nada congela).
+3. 🟡 **Aumentar o mapa** e subir o padrão pra ~70 bots. Pronto: tamanho configurável no
+   servidor (`--map-size=2048`), terreno desenhado por partes no cliente, save que lembra o
+   tamanho. Falta o Marcelo escolher o tamanho (questionário, pergunta 1) pra trocar o padrão
+   de 512 m e de 20 bots. Com 2048 m e 70 bots o `--bench` deu 1,5 a 2,4% de um núcleo.
 4. Testar o servidor no Lenovo de verdade (CPU/RAM com 5 jogadores + 70 bots). A ferramenta
    está pronta (`testar_desempenho.bat` no zip, ou `--bench`); falta rodar no Lenovo e colar
    o resultado aqui.

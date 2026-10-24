@@ -4,7 +4,8 @@ extends RefCounted
 ## Não sabe nada de rede: o servidor chama step() e lê `events`.
 ## Isso permite testar toda a lógica do jogo sem abrir conexão.
 
-const SAVE_FORMAT := 1
+## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
+const SAVE_FORMAT := 2
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -35,6 +36,8 @@ var bush_food := PackedFloat32Array()
 var player_records := {}
 ## Momentos (world_time) em que um bot novo deve entrar.
 var respawn_queue: Array = []
+## Onde e qual bot entra, e quais congelados mudam de lugar (design, seção 3).
+var director := PopulationDirector.new()
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -44,8 +47,9 @@ var _grid := {}
 var _step_index := 0
 
 
-func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET) -> void:
-	terrain = Terrain.get_shared(p_seed)
+func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET,
+		p_map_size: float = GameConfig.DEFAULT_MAP_SIZE) -> void:
+	terrain = Terrain.get_shared(p_seed, p_map_size)
 	rng.seed = p_seed * 31 + 7
 	bot_target = clampi(p_bot_target, 0, GameConfig.BOT_MAX)
 	bush_food.resize(terrain.bushes.size())
@@ -249,6 +253,7 @@ func step(dt: float) -> void:
 	_update_carcasses(dt)
 	_regrow_bushes(dt)
 	_process_respawns()
+	director.update(self, dt)
 
 
 ## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
@@ -342,7 +347,7 @@ func _separate_bots() -> void:
 			var push := delta / dist * (min_d - dist) * share
 			b.pos.x += push.x
 			b.pos.z += push.y
-			b.pos = Terrain.clamp_to_play_area(b.pos)
+			b.pos = terrain.clamp_to_play_area(b.pos)
 			b.pos.y = Movement.ground_y(terrain, b.pos.x, b.pos.z, b.body_height())
 
 
@@ -430,7 +435,9 @@ func _regrow_bushes(dt: float) -> void:
 # ---------------------------------------------------------------- população
 
 ## Escolhe a espécie do próximo bot mantendo ~65% herbívoros / 35% carnívoros.
-func choose_bot_species() -> String:
+## `need` ("herb" ou "carn") é o que a área pede (PopulationDirector); vale só enquanto a
+## proporção geral fica a até DIRECTOR_SHARE_TOLERANCE dos 65%.
+func choose_bot_species(need: String = "") -> String:
 	var herb := 0
 	var total := 0
 	for d: Dino in dinos.values():
@@ -438,18 +445,23 @@ func choose_bot_species() -> String:
 			total += 1
 			if not d.is_carnivore():
 				herb += 1
-	var want_herb := roundi((total + 1) * GameConfig.HERBIVORE_SHARE)
-	if herb < want_herb:
+	var as_herb := herb < roundi((total + 1) * GameConfig.HERBIVORE_SHARE)
+	if need != "":
+		var share := float(herb + int(need == "herb")) / (total + 1)
+		if absf(share - GameConfig.HERBIVORE_SHARE) <= GameConfig.DIRECTOR_SHARE_TOLERANCE:
+			as_herb = need == "herb"
+	if as_herb:
 		return "triceratops" if rng.randf() < 0.4 else "dryosaurus"
 	return "carnotaurus"
 
 
 func spawn_bot(species_id: String = "", growth: float = -1.0) -> Dino:
+	var plan := director.pick_spawn(self)
 	if species_id == "":
-		species_id = choose_bot_species()
+		species_id = choose_bot_species(String(plan.get("need", "")))
 	if growth < 0.0:
 		growth = rng.randf_range(0.45, 1.0)
-	var pos := _bot_spawn_point()
+	var pos: Vector3 = plan["pos"] if plan.has("pos") else _bot_spawn_point()
 	var d := Dino.create(new_id(), species_id, growth, pos)
 	d.is_bot = true
 	d.yaw = rng.randf_range(-PI, PI)
@@ -593,6 +605,7 @@ func to_save() -> Dictionary:
 		"format": SAVE_FORMAT,
 		"version": GameConfig.VERSION,
 		"seed": terrain.seed_value,
+		"map_size": terrain.size,
 		"world_time": world_time,
 		"next_id": next_id,
 		"bots": bot_list,
@@ -603,7 +616,23 @@ func to_save() -> Dictionary:
 	}
 
 
+## Tamanho do mapa de um save. Save da v0.1 (formato 1) não grava: era sempre 512 m.
+static func save_map_size(data: Dictionary) -> float:
+	return Terrain.normalize_size(float(data.get("map_size", 512.0)))
+
+
+## Por que um save não serve pra este mundo ("" = serve). Mapa diferente (semente ou tamanho)
+## deixaria os dinos salvos em lugares que não existem mais.
+func save_mismatch(data: Dictionary) -> String:
+	if int(data.get("seed", -1)) != terrain.seed_value:
+		return "o save é de outro mapa (semente %d, este é %d)" % [int(data.get("seed", -1)), terrain.seed_value]
+	if save_map_size(data) != terrain.size:
+		return "o save é de um mapa de %d m (este é de %d m)" % [int(save_map_size(data)), int(terrain.size)]
+	return ""
+
+
 ## Carrega um save. Jogadores ficam só nos registros (entram de novo quando conectam).
+## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))

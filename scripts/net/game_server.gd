@@ -30,15 +30,26 @@ func start(args: Dictionary) -> Error:
 		save_path = String(args["save"]).replace("\\", "/")
 	var seed_value := int(args.get("seed", GameConfig.WORLD_SEED))
 	var bots := int(args.get("bots", GameConfig.DEFAULT_BOT_TARGET))
+	var saved := _read_save()
+	# Tamanho do mapa: o de --map-size; senão o do save (o .bat não precisa repetir); senão o padrão.
+	var map_size := GameConfig.DEFAULT_MAP_SIZE
+	if args.has("map-size"):
+		map_size = float(args["map-size"])
+	elif not saved.is_empty():
+		map_size = WorldSim.save_map_size(saved)
 
-	sim = WorldSim.new(seed_value, bots)
-	if not _load():
-		sim.populate()
-		_log("mundo novo criado: semente=%d bots=%d" % [seed_value, sim.bot_count()])
-	else:
+	sim = WorldSim.new(seed_value, bots, map_size)
+	var mismatch := "" if saved.is_empty() else sim.save_mismatch(saved)
+	if not saved.is_empty() and mismatch == "":
+		sim.load_save(saved)
 		sim.bot_target = clampi(bots, 0, GameConfig.BOT_MAX)
-		_log("save carregado: world_time=%.2f bots=%d jogadores salvos=%d" % [
-			sim.world_time, sim.bot_count(), sim.player_records.size()])
+		_log("save carregado: mapa=%d m world_time=%.2f bots=%d jogadores salvos=%d" % [
+			sim.terrain.size, sim.world_time, sim.bot_count(), sim.player_records.size()])
+	else:
+		if mismatch != "":
+			_set_aside_save(mismatch)
+		sim.populate()
+		_log("mundo novo criado: semente=%d mapa=%d m bots=%d" % [seed_value, sim.terrain.size, sim.bot_count()])
 
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, GameConfig.MAX_PLAYERS + 3)
@@ -160,6 +171,7 @@ func _welcome_info(dino: Dino, restored: bool) -> Dictionary:
 		"species": dino.species,
 		"restored": restored,
 		"seed": sim.terrain.seed_value,
+		"map_size": sim.terrain.size,
 		"world_time": sim.world_time,
 		"version": GameConfig.VERSION,
 		"dev": dev_mode,
@@ -197,7 +209,7 @@ func on_state(peer_id: int, seq: int, pos: Vector3, yaw: float, flags: int) -> v
 	var now := Time.get_ticks_msec() / 1000.0
 	var elapsed := clampf(now - d.last_client_time, 0.01, 1.0)
 	d.last_client_time = now
-	var p := Terrain.clamp_to_play_area(pos)
+	var p := sim.terrain.clamp_to_play_area(pos)
 	p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
 	var moved := Movement.flat_distance(p, d.pos)
 	d.moving_speed = moved / elapsed if (flags & Net.CF_MOVING) else 0.0
@@ -272,7 +284,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				reply = "Crescimento = %.0f%%" % (d.growth * 100.0)
 			"/tp":
 				if parts.size() >= 3:
-					var p := Terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
+					var p := sim.terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
 					p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
 					if parts.size() >= 4:
 						d.yaw = float(parts[3])
@@ -305,7 +317,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 					var b := sim.spawn_bot(sp_id, clampf(g, 0.0, 1.0))
 					# Aparece uns 12 m na frente, um pouco pro lado a cada chamada.
 					var side := d.forward().cross(Vector3.UP) * sim.rng.randf_range(-6.0, 6.0)
-					var p := Terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
+					var p := sim.terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
 					b.pos = Vector3(p.x, Movement.ground_y(sim.terrain, p.x, p.z, b.body_height()), p.z)
 					b.yaw = d.yaw + PI
 					reply = "%s criado na sua frente" % Species.display_name(sp_id)
@@ -446,19 +458,26 @@ func save() -> void:
 		_log("ERRO ao trocar o save: %s" % error_string(err))
 
 
-func _load() -> bool:
+## O save em disco, ou {} se não existe ou está ilegível.
+func _read_save() -> Dictionary:
 	if not FileAccess.file_exists(save_path):
-		return false
-	var text := FileAccess.get_file_as_string(save_path)
-	var parsed = JSON.parse_string(text)
+		return {}
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(save_path))
 	if typeof(parsed) != TYPE_DICTIONARY:
 		_log("AVISO: save ilegível em %s, começando mundo novo" % save_path)
-		return false
-	if int(parsed.get("seed", -1)) != sim.terrain.seed_value:
-		_log("AVISO: save é de outro mapa (semente diferente), começando mundo novo")
-		return false
-	sim.load_save(parsed)
-	return true
+		return {}
+	return parsed
+
+
+## Save de outro mapa (semente ou tamanho): guarda com outro nome em vez de sobrescrever,
+## pra ninguém perder o dino por ter iniciado o servidor com o mapa errado.
+func _set_aside_save(why: String) -> void:
+	var aside := "%s.outro-mapa-%d.json" % [save_path.get_basename(), int(Time.get_unix_time_from_system())]
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(save_path), ProjectSettings.globalize_path(aside))
+	if err == OK:
+		_log("AVISO: %s. Começando mundo novo; o save antigo foi guardado em %s" % [why, aside])
+	else:
+		_log("AVISO: %s. Começando mundo novo (ERRO ao guardar o save antigo: %s)" % [why, error_string(err)])
 
 
 func _notification(what: int) -> void:

@@ -44,7 +44,11 @@ headless e rápido (`tests/run_tests.gd`).
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
 - `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots.
+  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população.
+- Diretor de população (`sim/population_director.gd`, valores em `config.gd`): agrupa os
+  jogadores, conta os bots na área de cada grupo e decide onde e qual espécie nasce na
+  reposição (`WorldSim.spawn_bot`). A cada 5 s muda de lugar alguns bots congelados longe de
+  todos pra área com falta de bots. Sem jogador no mundo não faz nada.
 
 ## Protocolo (scripts/net/net.gd)
 
@@ -60,7 +64,7 @@ Servidor → cliente:
 
 | RPC | Conteúdo |
 |---|---|
-| `s_welcome(info)` | id da entidade, espécie, semente do mapa, se foi restaurado, modo dev |
+| `s_welcome(info)` | id da entidade, espécie, semente e tamanho do mapa (`map_size`), se foi restaurado, modo dev |
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando, nadando, andando) |
@@ -79,6 +83,20 @@ segmento (com raio) encostar em alguma esfera do alvo, no fim da preparação do
 
 ## Save (`world.json`)
 
-`format`, `version`, `seed`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
+`format`, `version`, `seed`, `map_size`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
 `players{nome: {alive, dino}}`, `respawn_queue[]`. Os jogadores conectados são gravados
 como estão naquele instante; quem está offline fica congelado no registro.
+
+- Formato 2 (v0.2) grava `map_size`; o formato 1 (v0.1) não tinha e é lido como 512 m.
+- Tamanho do mapa ao subir o servidor: o de `--map-size`; senão o do save; senão 512 m.
+- Save de outro mapa (semente ou tamanho diferente) não é sobrescrito: o servidor guarda ele
+  como `world.outro-mapa-<hora>.json` e começa um mundo novo (`WorldSim.save_mismatch`).
+
+## Mapa e terreno
+
+- `Terrain.get_shared(semente, tamanho)` gera o mesmo terreno no servidor e nos clientes. Com
+  512 m é idêntico ao da v0.1. Gerar leva ~0,03 s (512 m), ~0,5 s (2048 m), ~1,4 s (4096 m).
+- O cliente (`TerrainView`) desenha pedaços de 128 m só num raio de ~1150 m em volta do
+  jogador, com 4 níveis de detalhe (vértice a cada 2, 4, 8 e 16 m; arbustos até 448 m) e
+  histerese. Monta poucos por quadro (4 ms), mas o pedaço embaixo do jogador sai na hora.
+  `TerrainView.wanted_chunks` é a função pura que decide o que carregar (testada sem tela).

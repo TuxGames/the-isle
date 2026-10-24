@@ -216,10 +216,11 @@ func _clear_world() -> void:
 func _on_welcome(info: Dictionary) -> void:
 	my_id = int(info["entity_id"])
 	my_species = String(info["species"])
-	if terrain == null or terrain.seed_value != int(info["seed"]):
+	var map_size := Terrain.normalize_size(float(info.get("map_size", GameConfig.DEFAULT_MAP_SIZE)))
+	if terrain == null or terrain.seed_value != int(info["seed"]) or terrain.size != map_size:
 		if terrain_view:
 			terrain_view.queue_free()
-		terrain = Terrain.get_shared(int(info["seed"]))
+		terrain = Terrain.get_shared(int(info["seed"]), map_size)
 		terrain_view = TerrainView.build(terrain)
 		add_child(terrain_view)
 	if my_view:
@@ -404,6 +405,8 @@ func _process(delta: float) -> void:
 	if alive and my_view:
 		_update_local(delta)
 	_update_camera(delta)
+	if terrain_view:
+		terrain_view.focus = my_pos
 	_send_accum += delta
 	if alive and my_seq > 0 and _send_accum >= 1.0 / GameConfig.CLIENT_SEND_HZ:
 		_send_accum = 0.0
@@ -451,7 +454,7 @@ func _update_local(delta: float) -> void:
 			spd *= Movement.SWIM_SPEED_MULT
 		my_pos += Vector3(sin(my_yaw), 0.0, cos(my_yaw)) * spd * delta
 	_push_out_of_others()
-	my_pos = Terrain.clamp_to_play_area(my_pos)
+	my_pos = terrain.clamp_to_play_area(my_pos)
 	my_pos.y = Movement.ground_y(terrain, my_pos.x, my_pos.z, _body_height())
 	my_view.position = my_pos
 	my_view.rotation.y = my_yaw
@@ -539,9 +542,8 @@ func _prompt_text() -> String:
 				if Movement.flat_distance(mouth, v.position) <= cr + reach:
 					return "[E] comer"
 	else:
-		for p in terrain.bushes:
-			if Movement.flat_distance(mouth, p) <= Terrain.BUSH_RADIUS + reach:
-				return "[E] comer"
+		if not terrain.bushes_near(mouth, Terrain.BUSH_RADIUS + reach).is_empty():
+			return "[E] comer"
 	return ""
 
 
