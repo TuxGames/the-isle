@@ -25,7 +25,7 @@ godot --headless --path . -- --bench   # teste de desempenho do servidor (5 joga
 
 A CI (`.github/workflows/testes.yml`) roda o `tools/test.sh` a cada push, em qualquer branch.
 
-Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30`
+Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30` (mapa maior: `--map-size=2048`)
 Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux` (ou sem args = menu)
 
 ## Regras
