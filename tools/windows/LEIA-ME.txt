@@ -1,0 +1,39 @@
+DINO SURVIVAL (nome provisório) - protótipo v0.1
+==================================================
+
+COMO JOGAR SOZINHO (pra testar)
+  1. Abra DinoSurvival.exe
+  2. Digite seu nome e clique em "Testar sozinho".
+     Isso abre um servidor escondido neste PC e já entra nele.
+
+COMO JOGAR COM OS AMIGOS (até 5)
+  No PC que vai ser o servidor (o Lenovo):
+    1. Instale o Tailscale (https://tailscale.com/download) e entre na conta.
+    2. Dê dois cliques em iniciar_servidor.bat. Se o Windows perguntar sobre o
+       firewall, clique em "Permitir acesso" (redes privadas).
+    3. Anote o IP do Tailscale deste PC (aparece no ícone do Tailscale, começa com 100.).
+  No PC de cada amigo:
+    1. Instale o Tailscale e entre na MESMA rede (o dono da conta convida
+       os outros pelo painel do Tailscale, em "Share" ou "Invite users").
+    2. Abra DinoSurvival.exe, digite o nome, coloque o IP do servidor
+       (ex.: 100.64.0.5) e clique em "Entrar no servidor".
+
+  Use sempre o mesmo nome: é ele que guarda o seu dino.
+
+CONTROLES
+  W A S D ..... andar (o dino vai pra onde a câmera aponta)
+  Shift ....... correr (gasta fôlego)
+  Mouse ....... girar a câmera
+  Clique ...... morder / chifrar / chutar
+  E (segurar) . comer (carcaça ou arbusto) / beber (de frente pro rio)
+  C ........... deitar pra descansar (cura e recupera fôlego mais rápido)
+  Enter ....... chat. Começando com / vira comando de teste:
+                /grow 1 (vira adulto), /spawn triceratops 1, /tp 200 300,
+                /hp 50, /food 100 100, /kill, /bots
+  F1 .......... esconde/mostra a ajuda
+  Esc ......... menu (sair do servidor / fechar o jogo)
+
+REGRAS DO MUNDO
+  - Se ninguém estiver online, o mundo inteiro fica parado.
+  - Quando você sai, seu dino some e fica congelado até você voltar.
+  - Morreu? Escolhe uma espécie e recomeça jovem.
