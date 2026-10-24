@@ -1,11 +1,13 @@
-# Gera o zip do jogo pra Windows e publica em Releases quando alguém cria uma tag vX.Y.Z.
-# A tag tem que bater com GameConfig.VERSION (scripts/config.gd) e com o project.godot.
-#   git tag v0.1.0 && git push origin v0.1.0
-# Rodando à mão (Actions → Release → Run workflow) só gera o zip, sem publicar.
+# Gera o zip do jogo pra Windows e publica em Releases.
+# - Push na main com um GameConfig.VERSION que ainda não tem Release: cria a tag vX.Y.Z
+#   nesse commit e publica. Ou seja, subiu o VERSION e fez o merge, saiu a versão.
+# - Push de uma tag vX.Y.Z (tem que bater com o VERSION): publica nessa tag.
+# - Rodando à mão (Actions → Release → Run workflow): só gera o zip, sem publicar.
 name: Release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -22,6 +24,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Conferir a versão
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep -E '^const VERSION' scripts/config.gd | sed -E 's/.*"(.*)".*/\1/')
           if ! grep -q "^config/version=\"${VERSION}\"" project.godot; then
@@ -33,8 +37,27 @@ jobs:
             exit 1
           fi
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          # Publica numa tag, ou na main quando essa versão ainda não tem Release.
+          PUBLISH=false
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            PUBLISH=true
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "A versão ${VERSION} já tem Release; nada a publicar."
+            else
+              PUBLISH=true
+            fi
+          fi
+          echo "PUBLISH=${PUBLISH}" >> "$GITHUB_ENV"
+          # Push na main sem versão nova: não precisa nem gerar o zip.
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${PUBLISH}" = "false" ]; then
+            echo "BUILD=false" >> "$GITHUB_ENV"
+          else
+            echo "BUILD=true" >> "$GITHUB_ENV"
+          fi
 
       - name: Cache do Godot
+        if: env.BUILD == 'true'
         id: cache-godot
         uses: actions/cache@v4
         with:
@@ -42,7 +65,7 @@ jobs:
           key: godot-${{ env.GODOT_VERSION }}-linux
 
       - name: Baixar o Godot ${{ env.GODOT_VERSION }}
-        if: steps.cache-godot.outputs.cache-hit != 'true'
+        if: env.BUILD == 'true' && steps.cache-godot.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/godot
           curl -sSfL -o /tmp/godot.zip \
@@ -52,6 +75,7 @@ jobs:
 
       # Só os modelos do Windows (o pacote completo tem 1,3 GB).
       - name: Cache dos export templates
+        if: env.BUILD == 'true'
         id: cache-templates
         uses: actions/cache@v4
         with:
@@ -59,7 +83,7 @@ jobs:
           key: godot-templates-${{ env.GODOT_VERSION }}-windows-x86_64
 
       - name: Baixar os export templates do Windows
-        if: steps.cache-templates.outputs.cache-hit != 'true'
+        if: env.BUILD == 'true' && steps.cache-templates.outputs.cache-hit != 'true'
         run: |
           DEST=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p "$DEST"
@@ -70,12 +94,15 @@ jobs:
           rm /tmp/templates.tpz
 
       - name: Testes
+        if: env.BUILD == 'true'
         run: GODOT="$HOME/godot/godot" tools/test.sh
 
       - name: Gerar o zip do Windows
+        if: env.BUILD == 'true'
         run: GODOT="$HOME/godot/godot" tools/export.sh
 
       - name: Guardar o zip no Actions
+        if: env.BUILD == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: DinoSurvival-windows-v${{ env.VERSION }}
@@ -83,7 +110,7 @@ jobs:
           retention-days: 14
 
       - name: Publicar em Releases
-        if: github.ref_type == 'tag'
+        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -98,5 +125,6 @@ jobs:
           O Windows pode avisar que o app é de um editor desconhecido: clique em "Mais informações" e depois em "Executar assim mesmo".
           Servidor e jogadores precisam estar na mesma versão.
           EOF
-          gh release create "${GITHUB_REF_NAME}" "$ZIP" --title "Dino Survival ${VERSION}" --notes-file /tmp/notas.md \
-            || gh release upload "${GITHUB_REF_NAME}" "$ZIP" --clobber
+          TAG="v${VERSION}"
+          gh release create "$TAG" "$ZIP" --target "${GITHUB_SHA}" --title "Dino Survival ${VERSION}" \
+            --notes-file /tmp/notas.md || gh release upload "$TAG" "$ZIP" --clobber
