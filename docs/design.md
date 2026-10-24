@@ -159,6 +159,10 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 
 ## Em aberto (perguntar ao Marcelo)
 
+As perguntas abaixo estão num questionário pro Marcelo responder (página privada do Tux no
+claude.ai: https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7). As respostas ficam no banco da
+página, coleção `respostas`, documento `marcelo`. Quando chegarem, passe as decisões pra cá.
+
 - Lista de ferimentos (tipos, penalidades, tempo de cura por espécie).
 - Lista final de espécies e quantas no total.
 - Tempo de crescimento real de cada espécie (os da tabela são de teste).
