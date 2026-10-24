@@ -21,7 +21,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Jogo próprio, inspirado em The Isle (não é mod nem servidor do The Isle) | ✅ |
 | Instalado no PC (não roda no navegador) | ✅ (.exe para Windows) |
 | Máximo de **5 jogadores** simultâneos | ✅ |
-| Servidor dedicado num PC separado ligado 24h (Lenovo IdeaPad S145: i5 8ª geração, 8 GB RAM, HD 1 TB; specs lidas da etiqueta, falta confirmar) | ✅ roda sem tela (`--headless`); ainda não testado no Lenovo |
+| Servidor dedicado num PC separado ligado 24h (Lenovo IdeaPad S145: i5 8ª geração, 8 GB RAM, HD 1 TB; specs lidas da etiqueta, falta confirmar) | ✅ roda sem tela (`--headless`); ainda não testado no Lenovo (o `testar_desempenho.bat` mede CPU, RAM e upload e mostra o processador, o que confirma as specs) |
 | Os jogadores só desenham; o servidor cuida da simulação | ✅ (exceção: o movimento do próprio dino, ver engenharia) |
 | Referência visual: The Isle | ⬜ (v0.1 usa formas simples no lugar dos modelos) |
 

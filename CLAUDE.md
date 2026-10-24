@@ -20,6 +20,7 @@ tools/net_test.sh     # só o teste de rede (servidor + clientes reais headless)
 godot --headless --path . -s tests/run_tests.gd -- --only=nome   # filtra testes
 tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.9 -0.2   # print do jogo
 tools/export.sh       # gera build/DinoSurvival.exe (precisa dos export templates)
+godot --headless --path . -- --bench   # teste de desempenho do servidor (5 jogadores + 70 bots)
 ```
 
 A CI (`.github/workflows/testes.yml`) roda o `tools/test.sh` a cada push, em qualquer branch.

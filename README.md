@@ -36,6 +36,8 @@ ZeroTier ou Radmin VPN.
 - Desative a suspensão automática do Windows.
 - Trocar o HD por um SSD barato ajuda muito.
 - O servidor não desenha nada. Nos testes, 70 bots custaram ~2 ms por passo de simulação.
+- Pra saber se o notebook aguenta, dê dois cliques em `testar_desempenho.bat` (vem no zip).
+  Leva cerca de 1 minuto e mostra CPU, RAM, upload e um veredito.
 
 ## Desenvolver
 

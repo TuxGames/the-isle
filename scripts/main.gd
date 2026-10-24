@@ -2,6 +2,7 @@ extends Node
 ## Ponto de entrada. Decide o papel deste processo:
 ##   --server (ou rodando --headless)  → servidor dedicado
 ##   --test-client                       → cliente automático dos testes de rede
+##   --bench                             → teste de desempenho do servidor neste PC (e fecha)
 ##   (nada)                              → jogo normal, com menu
 ##
 ## Exemplos:
@@ -22,6 +23,9 @@ func _ready() -> void:
 		scenario.name = "NetScenario"
 		add_child(scenario)
 		scenario.call("run", args)
+	elif args.has("bench"):
+		# Mede quanto o servidor pesa neste PC e fecha (ver scripts/bench.gd).
+		get_tree().quit(Bench.run(args))
 	elif args.has("server") or DisplayServer.get_name() == "headless":
 		var server := GameServer.new()
 		server.name = "GameServer"

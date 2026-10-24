@@ -21,7 +21,9 @@
 2. **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
    separados; carnívoros com fome → mais herbívoros na área.
 3. Subir o padrão pra ~70 bots e aumentar o mapa (precisa da etapa 1).
-4. Testar o servidor no Lenovo de verdade (CPU/RAM com 5 jogadores + 70 bots).
+4. Testar o servidor no Lenovo de verdade (CPU/RAM com 5 jogadores + 70 bots). A ferramenta
+   está pronta (`testar_desempenho.bat` no zip, ou `--bench`); falta rodar no Lenovo e colar
+   o resultado aqui.
 
 ## v0.3: ferimentos e rastro
 
