@@ -146,7 +146,7 @@ func test_comer_e_beber(t) -> void:
 	t.check(carn.hunger > 20.0, "carnívoro come da carcaça (fome %.1f)" % carn.hunger)
 	# Beber: de frente pro rio
 	var z := 250.0
-	var cx := Terrain.river_center_x(z)
+	var cx := w.terrain.river_center_x(z)
 	var thirsty: Dino = w.login_player("s", "carnotaurus")["dino"]
 	thirsty.growth = 1.0
 	thirsty.pos = Vector3(cx - Terrain.RIVER_HALF_WIDTH - 4.0, 0, z)

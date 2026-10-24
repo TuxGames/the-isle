@@ -7,13 +7,15 @@ extends Node3D
 ## servidor 20x por segundo. Vida, fome, mordidas etc. quem decide é o servidor.
 ##
 ## Argumentos úteis (depois do "--"):
-##   --connect=IP[:porta] --name=Tux --species=carnotaurus   entra direto
+##   --connect=IP[:porta] --name=Tux --password=... --species=carnotaurus   entra direto
 ##   --solo                                                   abre servidor local e entra
 ##   --screenshot=arquivo.png --screenshot-after=8            tira print (testes)
+##   --open-settings=Vídeo|Controles|Interface|Conta          abre as configurações (prints)
 
 const MOUSE_SENS := 0.0035
 
 var hud: Hud
+var settings := Settings.new()
 var terrain: Terrain
 var terrain_view: TerrainView
 var camera: Camera3D
@@ -46,6 +48,9 @@ var _server_pid := -1
 var _pending_login := {}
 var _args := {}
 var _connect_timer: SceneTreeTimer
+## Nome com que o servidor aceitou o login, e a chave nova de uma troca de senha em andamento.
+var _my_name := ""
+var _pending_new_key := ""
 
 
 func start(args: Dictionary) -> void:
@@ -59,6 +64,13 @@ func start(args: Dictionary) -> void:
 	hud.respawn_requested.connect(_respawn)
 	hud.chat_submitted.connect(_on_chat)
 	hud.leave_requested.connect(_leave)
+	settings.load_file()
+	settings.apply_window()
+	hud.setup_settings(settings)
+	hud.settings_panel.changed.connect(_apply_settings)
+	hud.settings_panel.change_password_requested.connect(_change_password)
+	hud.settings_panel.forget_password_requested.connect(func(): hud.forget_key())
+	Net.password_changed.connect(_on_password_changed)
 
 	Net.welcome_received.connect(_on_welcome)
 	Net.login_failed.connect(_on_login_failed)
@@ -75,8 +87,8 @@ func start(args: Dictionary) -> void:
 
 	camera = Camera3D.new()
 	camera.name = "Camera"
-	camera.fov = 70.0
-	camera.far = 1200.0
+	camera.fov = settings.fov
+	camera.far = settings.view_distance + 50.0
 	camera.position = Vector3(256, 80, 100)
 	add_child(camera)
 	camera.look_at(Vector3(256, 0, 256))
@@ -87,9 +99,13 @@ func start(args: Dictionary) -> void:
 	if args.has("cam-pitch"):
 		cam_pitch = float(args["cam-pitch"])
 	if args.has("solo"):
-		_host(String(args.get("name", "Jogador")), String(args.get("species", "carnotaurus")))
+		_host(String(args.get("name", "Jogador")), String(args.get("species", "carnotaurus")),
+				String(args.get("password", "")))
 	elif args.has("connect"):
-		_join(String(args.get("name", "Jogador")), String(args["connect"]), String(args.get("species", "carnotaurus")))
+		_join(String(args.get("name", "Jogador")), String(args["connect"]), String(args.get("species", "carnotaurus")),
+				String(args.get("password", "")))
+	if args.has("open-settings"):
+		hud.open_settings(String(args["open-settings"]))
 	if args.has("autopilot"):
 		_autopilot()
 	if args.has("screenshot"):
@@ -121,14 +137,26 @@ func _setup_input() -> void:
 
 # ---------------------------------------------------------------- conexão
 
-func _join(player_name: String, address: String, species_id: String) -> void:
+func _join(player_name: String, address: String, species_id: String, password: String = "") -> void:
 	if player_name == "":
 		hud.set_menu_status("Digite um nome.")
 		return
 	if address == "":
 		hud.set_menu_status("Digite o endereço do servidor.")
 		return
-	hud.save_prefs()
+	# A senha vira uma chave aqui mesmo; a senha em si não sai deste PC.
+	var key := ""
+	if password != "":
+		if password.length() < Accounts.MIN_PASSWORD:
+			hud.set_menu_status("A senha precisa de pelo menos %d letras ou números." % Accounts.MIN_PASSWORD)
+			return
+		key = Accounts.client_key(player_name, password)
+	else:
+		key = hud.remembered_key(player_name)
+		if key == "":
+			hud.set_menu_status("Digite sua senha. Na primeira vez num servidor, a senha que você digitar vira a senha do seu nome.")
+			return
+	hud.save_prefs(key)
 	var host := address
 	var port := GameConfig.DEFAULT_PORT
 	if address.count(":") == 1:
@@ -139,7 +167,7 @@ func _join(player_name: String, address: String, species_id: String) -> void:
 	if err != OK:
 		hud.set_menu_status("Não consegui iniciar a conexão (%s)." % error_string(err))
 		return
-	_pending_login = {"name": player_name, "species": species_id}
+	_pending_login = {"name": player_name, "species": species_id, "key": key}
 	hud.set_menu_status("Conectando em %s:%d..." % [host, port])
 	_connect_timer = get_tree().create_timer(10.0)
 	_connect_timer.timeout.connect(func():
@@ -150,7 +178,7 @@ func _join(player_name: String, address: String, species_id: String) -> void:
 
 
 ## "Testar sozinho": abre um servidor dedicado neste PC (processo separado) e entra nele.
-func _host(player_name: String, species_id: String) -> void:
+func _host(player_name: String, species_id: String, password: String = "") -> void:
 	if player_name == "":
 		player_name = "Jogador"
 	if _server_pid <= 0:
@@ -166,10 +194,11 @@ func _host(player_name: String, species_id: String) -> void:
 			return
 		hud.set_menu_status("Abrindo servidor local...")
 		await get_tree().create_timer(2.0).timeout
-	_join(player_name, "127.0.0.1", species_id)
+	_join(player_name, "127.0.0.1", species_id, password)
 
 
 func _on_connected() -> void:
+	Net.c_password.rpc_id(1, String(_pending_login.get("key", "")))
 	Net.c_login.rpc_id(1, String(_pending_login.get("name", "Jogador")),
 			String(_pending_login.get("species", "carnotaurus")), GameConfig.VERSION)
 	hud.set_menu_status("Conectado, entrando...")
@@ -209,6 +238,8 @@ func _clear_world() -> void:
 	my_id = 0
 	my_seq = 0
 	stats = PackedFloat32Array()
+	_my_name = ""
+	hud.set_account("")
 
 
 # ---------------------------------------------------------------- mensagens do servidor
@@ -216,12 +247,15 @@ func _clear_world() -> void:
 func _on_welcome(info: Dictionary) -> void:
 	my_id = int(info["entity_id"])
 	my_species = String(info["species"])
-	if terrain == null or terrain.seed_value != int(info["seed"]):
+	var map_size := Terrain.normalize_size(float(info.get("map_size", GameConfig.DEFAULT_MAP_SIZE)))
+	if terrain == null or terrain.seed_value != int(info["seed"]) or terrain.size != map_size:
 		if terrain_view:
 			terrain_view.queue_free()
-		terrain = Terrain.get_shared(int(info["seed"]))
+		terrain = Terrain.get_shared(int(info["seed"]), map_size)
 		terrain_view = TerrainView.build(terrain)
 		add_child(terrain_view)
+		terrain_view.set_view_distance(settings.view_distance)
+		terrain_view.set_shadows(settings.shadows)
 	if my_view:
 		my_view.queue_free()
 	if views.has(my_id):
@@ -233,8 +267,12 @@ func _on_welcome(info: Dictionary) -> void:
 	alive = true
 	in_game = true
 	stats = PackedFloat32Array()
+	_my_name = String(info.get("name", _pending_login.get("name", "")))
+	hud.set_account(_my_name)
 	hud.show_game()
 	hud.hide_death()
+	if bool(info.get("account_created", false)):
+		hud.add_message("Conta criada: \"%s\" agora tem senha. Guarde ela, é o que protege o seu dino." % String(info.get("name", "")))
 	if bool(info.get("restored", false)):
 		hud.add_message("Bem-vindo de volta! Seu %s estava te esperando." % Species.display_name(my_species))
 	else:
@@ -359,6 +397,10 @@ func _on_chat(text: String) -> void:
 # ---------------------------------------------------------------- entrada
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("menu") and hud.is_settings_open():
+		hud.close_settings()
+		get_viewport().set_input_as_handled()
+		return
 	if not in_game:
 		return
 	if event.is_action_pressed("menu"):
@@ -371,8 +413,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if hud.is_blocking_input():
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		cam_yaw -= event.relative.x * MOUSE_SENS
-		cam_pitch = clampf(cam_pitch - event.relative.y * MOUSE_SENS, -1.25, 0.35)
+		var sens := MOUSE_SENS * settings.mouse_sens
+		cam_yaw -= event.relative.x * sens
+		cam_pitch = clampf(cam_pitch - event.relative.y * sens * (-1.0 if settings.invert_y else 1.0), -1.25, 0.35)
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		get_viewport().set_input_as_handled()
@@ -385,6 +428,43 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("help"):
 		hud.toggle_help()
+		settings.show_help = hud.is_help_visible()
+		settings.save_file()
+
+
+# ---------------------------------------------------------------- configurações
+
+## Chamado a cada mudança na tela de configurações: aplica na hora e grava.
+func _apply_settings() -> void:
+	settings.apply_window()
+	camera.fov = settings.fov
+	camera.far = settings.view_distance + 50.0
+	if terrain_view:
+		terrain_view.set_view_distance(settings.view_distance)
+		terrain_view.set_shadows(settings.shadows)
+	hud.set_help_visible(settings.show_help)
+	settings.save_file()
+
+
+func _change_password(old_password: String, new_password: String, repeat: String) -> void:
+	if _my_name == "":
+		hud.settings_panel.set_password_status("Entre num servidor pra trocar a senha.", false)
+	elif new_password.length() < Accounts.MIN_PASSWORD:
+		hud.settings_panel.set_password_status("A senha nova precisa de pelo menos %d letras ou números." % Accounts.MIN_PASSWORD, false)
+	elif new_password != repeat:
+		hud.settings_panel.set_password_status("A senha nova e a repetição não batem.", false)
+	else:
+		_pending_new_key = Accounts.client_key(_my_name, new_password)
+		Net.c_set_password.rpc_id(1, Accounts.client_key(_my_name, old_password), _pending_new_key)
+		hud.settings_panel.set_password_status("Trocando...", false)
+
+
+func _on_password_changed(ok: bool, text: String) -> void:
+	hud.settings_panel.set_password_status(text, ok)
+	# Se este PC lembrava a senha velha, passa a lembrar a nova.
+	if ok and hud.remembered_key(_my_name) != "":
+		hud.save_prefs(_pending_new_key)
+	_pending_new_key = ""
 
 
 func _try_attack() -> void:
@@ -404,6 +484,8 @@ func _process(delta: float) -> void:
 	if alive and my_view:
 		_update_local(delta)
 	_update_camera(delta)
+	if terrain_view:
+		terrain_view.focus = my_pos
 	_send_accum += delta
 	if alive and my_seq > 0 and _send_accum >= 1.0 / GameConfig.CLIENT_SEND_HZ:
 		_send_accum = 0.0
@@ -451,7 +533,7 @@ func _update_local(delta: float) -> void:
 			spd *= Movement.SWIM_SPEED_MULT
 		my_pos += Vector3(sin(my_yaw), 0.0, cos(my_yaw)) * spd * delta
 	_push_out_of_others()
-	my_pos = Terrain.clamp_to_play_area(my_pos)
+	my_pos = terrain.clamp_to_play_area(my_pos)
 	my_pos.y = Movement.ground_y(terrain, my_pos.x, my_pos.z, _body_height())
 	my_view.position = my_pos
 	my_view.rotation.y = my_yaw
@@ -539,9 +621,8 @@ func _prompt_text() -> String:
 				if Movement.flat_distance(mouth, v.position) <= cr + reach:
 					return "[E] comer"
 	else:
-		for p in terrain.bushes:
-			if Movement.flat_distance(mouth, p) <= Terrain.BUSH_RADIUS + reach:
-				return "[E] comer"
+		if not terrain.bushes_near(mouth, Terrain.BUSH_RADIUS + reach).is_empty():
+			return "[E] comer"
 	return ""
 
 

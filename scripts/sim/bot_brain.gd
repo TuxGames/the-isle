@@ -243,7 +243,7 @@ static func _act(world: WorldSim, b: Dino, dt: float) -> void:
 				var dest: Vector3 = br.get("dest", world.terrain.nearest_water_point(b.pos))
 				if _steer(world, b, dest, speeds.x, dt, 0.5):
 					# Chegou no ponto e ainda não alcança a água: anda mais pra dentro do rio.
-					var cx := Terrain.river_center_x(b.pos.z)
+					var cx := world.terrain.river_center_x(b.pos.z)
 					br["dest"] = Vector3(lerpf(b.pos.x, cx, 0.5), 0.0, b.pos.z)
 		"eat":
 			if (b.is_carnivore() and not world.carcass_in_reach(b).is_empty()) \
@@ -276,10 +276,10 @@ static func _act(world: WorldSim, b: Dino, dt: float) -> void:
 			var away := Vector3(b.pos.x - threat.pos.x, 0.0, b.pos.z - threat.pos.z).normalized()
 			if away == Vector3.ZERO:
 				away = b.forward()
-			var dest3 := _clamp_inside(b.pos + away * 30.0)
+			var dest3 := _clamp_inside(world, b.pos + away * 30.0)
 			# Se encostou na borda do mapa, corre pela lateral.
 			if Movement.flat_distance(dest3, b.pos) < 10.0:
-				dest3 = _clamp_inside(b.pos + Vector3(-away.z, 0.0, away.x) * 30.0)
+				dest3 = _clamp_inside(world, b.pos + Vector3(-away.z, 0.0, away.x) * 30.0)
 			var sprint := b.stamina > 0.0
 			_steer(world, b, dest3, speeds.y if sprint else speeds.x, dt, 0.0, sprint)
 
@@ -310,16 +310,16 @@ static func _steer(world: WorldSim, b: Dino, dest: Vector3, speed: float, dt: fl
 		v *= Movement.SWIM_SPEED_MULT
 	v = minf(v, dist / dt)
 	b.pos += b.forward() * v * dt
-	b.pos = Terrain.clamp_to_play_area(b.pos)
+	b.pos = world.terrain.clamp_to_play_area(b.pos)
 	b.pos.y = Movement.ground_y(world.terrain, b.pos.x, b.pos.z, b.body_height())
 	b.moving_speed = v
 	b.sprinting = sprint
 	return false
 
 
-static func _clamp_inside(p: Vector3) -> Vector3:
+static func _clamp_inside(world: WorldSim, p: Vector3) -> Vector3:
 	var lo := Terrain.BORDER + 6.0
-	var hi := Terrain.SIZE - Terrain.BORDER - 6.0
+	var hi := world.terrain.size - Terrain.BORDER - 6.0
 	return Vector3(clampf(p.x, lo, hi), p.y, clampf(p.z, lo, hi))
 
 
@@ -338,7 +338,7 @@ static func _wander_destination(world: WorldSim, b: Dino) -> Vector3:
 		if n > 0:
 			dest = dest.lerp(sum / n, 0.5)
 	# Evita mandar o bicho pra dentro do rio fundo à toa.
-	dest = _clamp_inside(dest)
+	dest = _clamp_inside(world, dest)
 	if world.terrain.water_depth(dest.x, dest.z) > b.body_height() * 0.5:
 		dest = dest.lerp(b.pos, 0.6)
 	return dest

@@ -44,7 +44,11 @@ headless e rápido (`tests/run_tests.gd`).
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
 - `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots.
+  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população.
+- Diretor de população (`sim/population_director.gd`, valores em `config.gd`): agrupa os
+  jogadores, conta os bots na área de cada grupo e decide onde e qual espécie nasce na
+  reposição (`WorldSim.spawn_bot`). A cada 5 s muda de lugar alguns bots congelados longe de
+  todos pra área com falta de bots. Sem jogador no mundo não faz nada.
 
 ## Protocolo (scripts/net/net.gd)
 
@@ -52,7 +56,9 @@ Cliente → servidor:
 
 | RPC | Modo | Conteúdo |
 |---|---|---|
-| `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo |
+| `c_password(chave)` | confiável | chave da senha (`Accounts.client_key`), mandada logo antes do `c_login` |
+| `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo. Nunca muda de assinatura: um jogo de outra versão ainda recebe "versão diferente" |
+| `c_set_password(chave atual, chave nova)` | confiável | troca de senha; a resposta vem por `s_password_changed` |
 | `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
 | `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer, comando dev, chat |
 
@@ -60,7 +66,7 @@ Servidor → cliente:
 
 | RPC | Conteúdo |
 |---|---|
-| `s_welcome(info)` | id da entidade, espécie, semente do mapa, se foi restaurado, modo dev |
+| `s_welcome(info)` | id da entidade, nome (como foi cadastrado), se a conta acabou de ser criada, espécie, semente e tamanho do mapa (`map_size`), se foi restaurado, modo dev |
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando, nadando, andando) |
@@ -68,6 +74,7 @@ Servidor → cliente:
 | `s_roster(dict)` | id → nome dos jogadores online |
 | `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte |
 | `s_died(causa)`, `s_message(texto)` | morte do próprio jogador; mensagens/chat |
+| `s_password_changed(ok, texto)` | resposta da troca de senha (o cliente atualiza a senha lembrada) |
 
 ## Hitbox
 
@@ -77,8 +84,36 @@ O golpe é um segmento vertical saindo da boca/chifre (`attack_point`), descendo
 segmento (com raio) encostar em alguma esfera do alvo, no fim da preparação do golpe
 (`attack_windup`). A parte atingida muda o dano.
 
+## Configurações do jogador (`user://configuracoes.cfg`)
+
+`scripts/client/settings.gd` guarda e confere as opções; `scripts/ui/settings_panel.gd` é a tela
+(menu e Esc); o `GameClient` aplica (janela, câmera, `TerrainView.set_view_distance`/`set_shadows`,
+sensibilidade). Nada disso vai pro servidor, menos a troca de senha da aba Conta.
+
+## Contas (`<save>.contas.json`)
+
+`scripts/net/accounts.gd`. Nome (sem diferença de maiúsculas) → nome como foi cadastrado, sal
+aleatório e hash (PBKDF2-SHA256) da chave que o cliente manda. O cliente gera a chave com
+PBKDF2 da senha, usando o nome como sal; com "Lembrar a senha", guarda só essa chave em
+`user://cliente.cfg`. Fica fora do `world.json` pra trocar de mapa não apagar as senhas. Se o
+arquivo estiver ilegível, o servidor não sobe (não pode virar "ninguém tem senha").
+
 ## Save (`world.json`)
 
-`format`, `version`, `seed`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
+`format`, `version`, `seed`, `map_size`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
 `players{nome: {alive, dino}}`, `respawn_queue[]`. Os jogadores conectados são gravados
 como estão naquele instante; quem está offline fica congelado no registro.
+
+- Formato 2 (v0.2) grava `map_size`; o formato 1 (v0.1) não tinha e é lido como 512 m.
+- Tamanho do mapa ao subir o servidor: o de `--map-size`; senão o do save; senão 512 m.
+- Save de outro mapa (semente ou tamanho diferente) não é sobrescrito: o servidor guarda ele
+  como `world.outro-mapa-<hora>.json` e começa um mundo novo (`WorldSim.save_mismatch`).
+
+## Mapa e terreno
+
+- `Terrain.get_shared(semente, tamanho)` gera o mesmo terreno no servidor e nos clientes. Com
+  512 m é idêntico ao da v0.1. Gerar leva ~0,03 s (512 m), ~0,5 s (2048 m), ~1,4 s (4096 m).
+- O cliente (`TerrainView`) desenha pedaços de 128 m só num raio de ~1150 m em volta do
+  jogador, com 4 níveis de detalhe (vértice a cada 2, 4, 8 e 16 m; arbustos até 448 m) e
+  histerese. Monta poucos por quadro (4 ms), mas o pedaço embaixo do jogador sai na hora.
+  `TerrainView.wanted_chunks` é a função pura que decide o que carregar (testada sem tela).

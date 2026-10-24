@@ -7,8 +7,11 @@
 #  3. bob sai; alice confere que o dino dele sumiu e continua jogando sozinha.
 #  4. alice sai: ninguém online → o mundo tem que pausar.
 #  5. bob volta: tem que estar EXATAMENTE igual (vida, fome, sede, crescimento, posição).
-#  6. o servidor reinicia (lê o save) e o bob volta de novo, ainda igual.
+#  6. o servidor reinicia (lê o save e as contas); alguém tenta entrar como bob com a
+#     senha errada e é barrado; o bob volta com a senha certa, ainda igual.
 #  7. bob morre e renasce jovem.
+#  8-10. mapa de 1024 m: o cliente recebe o tamanho; reiniciar sem --map-size mantém o do
+#        save; reiniciar com outro tamanho guarda o save antigo à parte.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-godot}"
@@ -51,10 +54,40 @@ sleep 3   # ninguém online: o mundo tem que ficar parado
 client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 
 stop_server
-start_server   # reinício do servidor: o estado tem que vir do save
+start_server   # reinício do servidor: o estado e as contas têm que vir do disco
+client intruso || FAILS=$((FAILS+1))   # senha errada: barrado (a conta do bob veio do arquivo)
 client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 client bob_die || FAILS=$((FAILS+1))
+client troca_senha || FAILS=$((FAILS+1))   # troca a senha da dani (com a atual errada não troca)
+client dani_nova || FAILS=$((FAILS+1))     # e ela entra com a senha nova
 stop_server
+
+# Mapa de outro tamanho, num save à parte:
+#  8. o servidor sobe com --map-size=1024 e o cliente monta o mesmo mapa;
+#  9. sem --map-size, o tamanho vem do save;
+# 10. com outro tamanho, o save antigo é guardado com outro nome (ninguém perde o dino).
+SAVE2="$TMP/grande.json"
+LOG2="$TMP/server_mapa.log"
+start_server_map() {
+  "$GODOT" --headless --path . -- --server --dev --port="$PORT" --bots=0 --save="$SAVE2" "$@" >>"$LOG2" 2>&1 &
+  SERVER_PID=$!
+  sleep 2
+}
+start_server_map --map-size=1024
+client map_check --expect-map-size=1024 || FAILS=$((FAILS+1))
+stop_server
+start_server_map
+client map_check --expect-map-size=1024 || FAILS=$((FAILS+1))
+stop_server
+start_server_map --map-size=512
+client map_check --expect-map-size=512 || FAILS=$((FAILS+1))
+stop_server
+if ls "$TMP"/grande.outro-mapa-*.json >/dev/null 2>&1; then
+  echo "TEST PASS: [servidor] save de outro tamanho foi guardado à parte"
+else
+  echo "TEST FAIL: [servidor] save de outro tamanho não foi guardado à parte"
+  FAILS=$((FAILS+1))
+fi
 
 echo "---- log do servidor ----"
 grep -E "\[mundo\]|\[login\]|\[morte\]|ERROR" "$LOG"

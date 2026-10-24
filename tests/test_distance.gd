@@ -67,7 +67,8 @@ func test_histerese(t) -> void:
 
 
 func test_congelado_nao_muda_nada(t) -> void:
-	var w := WorldSim.new()
+	# Sem população-alvo o diretor não muda o bot de lugar: aqui o assunto é só o congelamento.
+	var w := WorldSim.new(GameConfig.WORLD_SEED, 0)
 	_player(w, "tux", ORIGIN)
 	var bot := _bot(w, "carnotaurus", _diag(ORIGIN, 560.0))
 	bot.growth = 0.6

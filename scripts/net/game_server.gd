@@ -14,6 +14,11 @@ var dev_mode: bool = false
 
 ## peer_id -> {"name": String, "dino_id": int}
 var peers := {}
+## Contas (nome + senha), gravadas ao lado do save: world.json -> world.contas.json.
+var accounts := Accounts.new()
+var accounts_path := ""
+## Chave da senha que chegou antes do c_login: peer_id -> String.
+var _pending_keys := {}
 
 var _sim_accum := 0.0
 var _snap_accum := 0.0
@@ -30,15 +35,29 @@ func start(args: Dictionary) -> Error:
 		save_path = String(args["save"]).replace("\\", "/")
 	var seed_value := int(args.get("seed", GameConfig.WORLD_SEED))
 	var bots := int(args.get("bots", GameConfig.DEFAULT_BOT_TARGET))
+	var saved := _read_save()
+	# Tamanho do mapa: o de --map-size; senão o do save (o .bat não precisa repetir); senão o padrão.
+	var map_size := GameConfig.DEFAULT_MAP_SIZE
+	if args.has("map-size"):
+		map_size = float(args["map-size"])
+	elif not saved.is_empty():
+		map_size = WorldSim.save_map_size(saved)
 
-	sim = WorldSim.new(seed_value, bots)
-	if not _load():
-		sim.populate()
-		_log("mundo novo criado: semente=%d bots=%d" % [seed_value, sim.bot_count()])
-	else:
+	sim = WorldSim.new(seed_value, bots, map_size)
+	var mismatch := "" if saved.is_empty() else sim.save_mismatch(saved)
+	if not saved.is_empty() and mismatch == "":
+		sim.load_save(saved)
 		sim.bot_target = clampi(bots, 0, GameConfig.BOT_MAX)
-		_log("save carregado: world_time=%.2f bots=%d jogadores salvos=%d" % [
-			sim.world_time, sim.bot_count(), sim.player_records.size()])
+		_log("save carregado: mapa=%d m world_time=%.2f bots=%d jogadores salvos=%d" % [
+			sim.terrain.size, sim.world_time, sim.bot_count(), sim.player_records.size()])
+	else:
+		if mismatch != "":
+			_set_aside_save(mismatch)
+		sim.populate()
+		_log("mundo novo criado: semente=%d mapa=%d m bots=%d" % [seed_value, sim.terrain.size, sim.bot_count()])
+
+	accounts_path = save_path.get_basename() + ".contas.json"
+	_load_accounts()
 
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, GameConfig.MAX_PLAYERS + 3)
@@ -99,6 +118,7 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	_pending_keys.erase(id)
 	if not peers.has(id):
 		return
 	var info: Dictionary = peers[id]
@@ -119,8 +139,11 @@ func _on_peer_disconnected(id: int) -> void:
 func on_login(peer_id: int, player_name: String, species_id: String, version: String) -> void:
 	if peers.has(peer_id):
 		return
-	player_name = player_name.strip_edges().substr(0, 16)
+	player_name = accounts.display_name(player_name.strip_edges().substr(0, 16))
+	var key := String(_pending_keys.get(peer_id, ""))
+	_pending_keys.erase(peer_id)
 	var reason := ""
+	var created := false
 	if version != GameConfig.VERSION:
 		reason = "Versão diferente: o servidor está na %s e o seu jogo na %s." % [GameConfig.VERSION, version]
 	elif player_name.is_empty():
@@ -129,11 +152,27 @@ func on_login(peer_id: int, player_name: String, species_id: String, version: St
 		reason = "Já tem alguém com o nome \"%s\" no servidor." % player_name
 	elif peers.size() >= GameConfig.MAX_PLAYERS:
 		reason = "Servidor cheio (%d jogadores)." % GameConfig.MAX_PLAYERS
+	else:
+		var now := Time.get_unix_time_from_system()
+		match accounts.login(player_name, key, now):
+			Accounts.Result.CREATED:
+				created = true
+				_save_accounts()
+				_log("[conta] conta nova: %s" % player_name)
+			Accounts.Result.WRONG:
+				reason = "Senha errada para \"%s\"." % player_name
+			Accounts.Result.LOCKED:
+				reason = "Muitas senhas erradas para \"%s\". Espere %d segundos." % [
+					player_name, ceili(accounts.lock_seconds_left(player_name, now))]
+			Accounts.Result.BAD_KEY:
+				reason = "Digite uma senha (pelo menos %d letras ou números)." % Accounts.MIN_PASSWORD
 	if reason != "":
 		Net.s_login_failed.rpc_id(peer_id, reason)
 		_log("login recusado (peer %d, \"%s\"): %s" % [peer_id, player_name, reason])
 		get_tree().create_timer(1.0).timeout.connect(func():
-			if multiplayer.multiplayer_peer != null and not peers.has(peer_id):
+			# Só se ele ainda estiver conectado (o jogo costuma sair sozinho ao ver a recusa).
+			if multiplayer.multiplayer_peer != null and not peers.has(peer_id) \
+					and multiplayer.get_peers().has(peer_id):
 				multiplayer.multiplayer_peer.disconnect_peer(peer_id))
 		return
 
@@ -148,18 +187,49 @@ func on_login(peer_id: int, player_name: String, species_id: String, version: St
 		player_name, Species.display_name(dino.species),
 		"dino salvo" if restored else "novo", dino.growth * 100.0, sim.world_time])
 
-	Net.s_welcome.rpc_id(peer_id, _welcome_info(dino, restored))
+	Net.s_welcome.rpc_id(peer_id, _welcome_info(dino, restored, player_name, created))
 	Net.s_teleport.rpc_id(peer_id, dino.client_seq, dino.pos, dino.yaw)
 	_broadcast_message("%s entrou no servidor" % player_name)
 	_roster_dirty = true
 
 
-func _welcome_info(dino: Dino, restored: bool) -> Dictionary:
+## Chave da senha, mandada pelo cliente logo antes do c_login.
+func on_password(peer_id: int, key: String) -> void:
+	if not peers.has(peer_id):
+		_pending_keys[peer_id] = key.substr(0, 64)
+
+
+## Troca de senha (aba Conta das configurações).
+func on_change_password(peer_id: int, old_key: String, new_key: String) -> void:
+	if not peers.has(peer_id):
+		return
+	var player_name := String(peers[peer_id]["name"])
+	var now := Time.get_unix_time_from_system()
+	var reply := ""
+	var result := accounts.change_key(player_name, old_key, new_key, now)
+	match result:
+		Accounts.Result.OK:
+			_save_accounts()
+			_log("[conta] %s trocou a senha" % player_name)
+			reply = "Senha trocada."
+		Accounts.Result.WRONG:
+			reply = "A senha atual está errada."
+		Accounts.Result.LOCKED:
+			reply = "Muitas senhas erradas. Espere %d segundos." % ceili(accounts.lock_seconds_left(player_name, now))
+		Accounts.Result.BAD_KEY:
+			reply = "A senha nova precisa de pelo menos %d letras ou números." % Accounts.MIN_PASSWORD
+	Net.s_password_changed.rpc_id(peer_id, result == Accounts.Result.OK, reply)
+
+
+func _welcome_info(dino: Dino, restored: bool, player_name: String, account_created: bool) -> Dictionary:
 	return {
 		"entity_id": dino.id,
+		"name": player_name,
+		"account_created": account_created,
 		"species": dino.species,
 		"restored": restored,
 		"seed": sim.terrain.seed_value,
+		"map_size": sim.terrain.size,
 		"world_time": sim.world_time,
 		"version": GameConfig.VERSION,
 		"dev": dev_mode,
@@ -197,7 +267,7 @@ func on_state(peer_id: int, seq: int, pos: Vector3, yaw: float, flags: int) -> v
 	var now := Time.get_ticks_msec() / 1000.0
 	var elapsed := clampf(now - d.last_client_time, 0.01, 1.0)
 	d.last_client_time = now
-	var p := Terrain.clamp_to_play_area(pos)
+	var p := sim.terrain.clamp_to_play_area(pos)
 	p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
 	var moved := Movement.flat_distance(p, d.pos)
 	d.moving_speed = moved / elapsed if (flags & Net.CF_MOVING) else 0.0
@@ -244,7 +314,7 @@ func _respawn(peer_id: int, species_id: String) -> void:
 	var d := sim.respawn_player(player_name, species_id)
 	peers[peer_id]["dino_id"] = d.id
 	_log("[login] %s renasceu como %s jovem" % [player_name, Species.display_name(d.species)])
-	Net.s_welcome.rpc_id(peer_id, _welcome_info(d, false))
+	Net.s_welcome.rpc_id(peer_id, _welcome_info(d, false, player_name, false))
 	Net.s_teleport.rpc_id(peer_id, d.client_seq, d.pos, d.yaw)
 	_roster_dirty = true
 	save()
@@ -272,7 +342,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				reply = "Crescimento = %.0f%%" % (d.growth * 100.0)
 			"/tp":
 				if parts.size() >= 3:
-					var p := Terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
+					var p := sim.terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
 					p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
 					if parts.size() >= 4:
 						d.yaw = float(parts[3])
@@ -305,7 +375,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 					var b := sim.spawn_bot(sp_id, clampf(g, 0.0, 1.0))
 					# Aparece uns 12 m na frente, um pouco pro lado a cada chamada.
 					var side := d.forward().cross(Vector3.UP) * sim.rng.randf_range(-6.0, 6.0)
-					var p := Terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
+					var p := sim.terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
 					b.pos = Vector3(p.x, Movement.ground_y(sim.terrain, p.x, p.z, b.body_height()), p.z)
 					b.yaw = d.yaw + PI
 					reply = "%s criado na sua frente" % Species.display_name(sp_id)
@@ -431,34 +501,61 @@ func _send_roster() -> void:
 # ---------------------------------------------------------------- save
 
 func save() -> void:
-	var data := sim.to_save()
-	var dir := save_path.get_base_dir()
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	var tmp := save_path + ".tmp"
+	_write_json(save_path, sim.to_save())
+
+
+## Grava num .tmp e troca pelo arquivo de verdade: um desligamento no meio não estraga o save.
+func _write_json(path: String, data: Dictionary) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	var tmp := path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		_log("ERRO ao salvar em %s: %s" % [tmp, error_string(FileAccess.get_open_error())])
 		return
 	f.store_string(JSON.stringify(data))
 	f.close()
-	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(save_path))
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(path))
 	if err != OK:
-		_log("ERRO ao trocar o save: %s" % error_string(err))
+		_log("ERRO ao trocar %s: %s" % [path, error_string(err)])
 
 
-func _load() -> bool:
+func _save_accounts() -> void:
+	_write_json(accounts_path, accounts.to_dict())
+
+
+func _load_accounts() -> void:
+	if not FileAccess.file_exists(accounts_path):
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(accounts_path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		# Não sobrescreve: um arquivo de contas estragado não pode virar "ninguém tem senha".
+		_log("ERRO: arquivo de contas ilegível em %s. Conserte ou apague o arquivo e reinicie." % accounts_path)
+		get_tree().quit(1)
+		return
+	accounts.load_dict(parsed)
+	_log("contas carregadas: %d" % accounts.accounts.size())
+
+
+## O save em disco, ou {} se não existe ou está ilegível.
+func _read_save() -> Dictionary:
 	if not FileAccess.file_exists(save_path):
-		return false
-	var text := FileAccess.get_file_as_string(save_path)
-	var parsed = JSON.parse_string(text)
+		return {}
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(save_path))
 	if typeof(parsed) != TYPE_DICTIONARY:
 		_log("AVISO: save ilegível em %s, começando mundo novo" % save_path)
-		return false
-	if int(parsed.get("seed", -1)) != sim.terrain.seed_value:
-		_log("AVISO: save é de outro mapa (semente diferente), começando mundo novo")
-		return false
-	sim.load_save(parsed)
-	return true
+		return {}
+	return parsed
+
+
+## Save de outro mapa (semente ou tamanho): guarda com outro nome em vez de sobrescrever,
+## pra ninguém perder o dino por ter iniciado o servidor com o mapa errado.
+func _set_aside_save(why: String) -> void:
+	var aside := "%s.outro-mapa-%d.json" % [save_path.get_basename(), int(Time.get_unix_time_from_system())]
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(save_path), ProjectSettings.globalize_path(aside))
+	if err == OK:
+		_log("AVISO: %s. Começando mundo novo; o save antigo foi guardado em %s" % [why, aside])
+	else:
+		_log("AVISO: %s. Começando mundo novo (ERRO ao guardar o save antigo: %s)" % [why, error_string(err)])
 
 
 func _notification(what: int) -> void:
