@@ -39,6 +39,32 @@ const SIM_FREEZE_DIST := 480.0
 ## SIM_FREEZE_DIST é a histerese: o bot não fica liga/desliga na borda.
 const SIM_WAKE_DIST := 320.0
 
+## Diretor de população (design, seção 3; ver sim/population_director.gd).
+## O comportamento foi decidido pelo Marcelo; TODOS os números abaixo são provisórios.
+## Jogadores a menos disso de alguém do grupo contam como um grupo só ("juntos").
+const DIRECTOR_GROUP_DIST := 200.0
+## "Área" de um grupo: até essa distância do jogador mais próximo dele.
+const DIRECTOR_AREA_RADIUS := 260.0
+## Parte da população-alvo que o diretor quer nas áreas dos jogadores, dividida igualmente
+## entre os grupos (juntos = tudo perto deles; separados = um pedaço pra cada). O resto fica solto.
+const DIRECTOR_NEAR_SHARE := 0.6
+## Carnívoro jogador com fome abaixo disso puxa herbívoros pra área dele.
+const DIRECTOR_HUNGRY := 50.0
+## Área com mais que essa fração de herbívoros (e pelo menos DIRECTOR_MIN_LOCAL bots) puxa carnívoros.
+const DIRECTOR_HERB_EXCESS := 0.8
+const DIRECTOR_MIN_LOCAL := 5
+## Quanto a proporção geral pode sair de HERBIVORE_SHARE por causa do diretor (0,1 = 55% a 75%).
+const DIRECTOR_SHARE_TOLERANCE := 0.1
+## De quanto em quanto tempo (s de mundo) o diretor muda bots congelados de lugar, quantos por vez,
+## e quanto tempo um bot que já mudou espera pra poder mudar de novo.
+const DIRECTOR_INTERVAL_S := 5.0
+const DIRECTOR_RELOCATE_MAX := 2
+const DIRECTOR_RELOCATE_COOLDOWN_S := 300.0
+## Só muda de lugar bot congelado a pelo menos isso de todos os jogadores (ninguém está vendo).
+const DIRECTOR_SOURCE_MIN_DIST := 480.0
+## O bot reaparece a pelo menos isso de todos os jogadores (mais longe que a simulação completa).
+const DIRECTOR_RELOCATE_MIN_DIST := 180.0
+
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1
 

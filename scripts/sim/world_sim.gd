@@ -35,6 +35,8 @@ var bush_food := PackedFloat32Array()
 var player_records := {}
 ## Momentos (world_time) em que um bot novo deve entrar.
 var respawn_queue: Array = []
+## Onde e qual bot entra, e quais congelados mudam de lugar (design, seção 3).
+var director := PopulationDirector.new()
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -249,6 +251,7 @@ func step(dt: float) -> void:
 	_update_carcasses(dt)
 	_regrow_bushes(dt)
 	_process_respawns()
+	director.update(self, dt)
 
 
 ## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
@@ -430,7 +433,9 @@ func _regrow_bushes(dt: float) -> void:
 # ---------------------------------------------------------------- população
 
 ## Escolhe a espécie do próximo bot mantendo ~65% herbívoros / 35% carnívoros.
-func choose_bot_species() -> String:
+## `need` ("herb" ou "carn") é o que a área pede (PopulationDirector); vale só enquanto a
+## proporção geral fica a até DIRECTOR_SHARE_TOLERANCE dos 65%.
+func choose_bot_species(need: String = "") -> String:
 	var herb := 0
 	var total := 0
 	for d: Dino in dinos.values():
@@ -438,18 +443,23 @@ func choose_bot_species() -> String:
 			total += 1
 			if not d.is_carnivore():
 				herb += 1
-	var want_herb := roundi((total + 1) * GameConfig.HERBIVORE_SHARE)
-	if herb < want_herb:
+	var as_herb := herb < roundi((total + 1) * GameConfig.HERBIVORE_SHARE)
+	if need != "":
+		var share := float(herb + int(need == "herb")) / (total + 1)
+		if absf(share - GameConfig.HERBIVORE_SHARE) <= GameConfig.DIRECTOR_SHARE_TOLERANCE:
+			as_herb = need == "herb"
+	if as_herb:
 		return "triceratops" if rng.randf() < 0.4 else "dryosaurus"
 	return "carnotaurus"
 
 
 func spawn_bot(species_id: String = "", growth: float = -1.0) -> Dino:
+	var plan := director.pick_spawn(self)
 	if species_id == "":
-		species_id = choose_bot_species()
+		species_id = choose_bot_species(String(plan.get("need", "")))
 	if growth < 0.0:
 		growth = rng.randf_range(0.45, 1.0)
-	var pos := _bot_spawn_point()
+	var pos: Vector3 = plan["pos"] if plan.has("pos") else _bot_spawn_point()
 	var d := Dino.create(new_id(), species_id, growth, pos)
 	d.is_bot = true
 	d.yaw = rng.randf_range(-PI, PI)
