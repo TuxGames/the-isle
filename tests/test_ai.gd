@@ -91,7 +91,7 @@ func test_jogador_filhote_e_percebido_mais_tarde(t) -> void:
 func test_bot_com_sede_vai_beber(t) -> void:
 	var w := WorldSim.new()
 	var z := 300.0
-	var cx := Terrain.river_center_x(z)
+	var cx := w.terrain.river_center_x(z)
 	var d := _bot(w, "dryosaurus", 1.0, Vector3(cx + 40.0, 0, z))
 	d.thirst = 20.0
 	t.check(_think(w, d) == "drink", "decide beber")

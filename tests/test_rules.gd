@@ -22,11 +22,11 @@ func test_terreno_igual_com_mesma_semente(t) -> void:
 func test_terreno_tem_rio_e_bordas(t) -> void:
 	var ter := Terrain.get_shared(GameConfig.WORLD_SEED)
 	for z in [50.0, 200.0, 400.0]:
-		var cx := Terrain.river_center_x(z)
+		var cx := ter.river_center_x(z)
 		t.check(ter.is_water(cx, z), "centro do rio é água em z=%d" % z)
 		t.check(ter.water_depth(cx, z) > 2.0, "rio é fundo no meio")
 	t.check(ter.height_at(2.0, 256.0) > 30.0, "borda oeste é montanha")
-	t.check(ter.bushes.size() == Terrain.BUSH_COUNT, "todos os arbustos foram colocados")
+	t.check(ter.bushes.size() == ter.bush_count(), "todos os arbustos foram colocados")
 	for p in ter.bushes:
 		if ter.is_water(p.x, p.z):
 			t.check(false, "arbusto dentro d'água em %s" % p)

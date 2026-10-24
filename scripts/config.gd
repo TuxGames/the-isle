@@ -4,13 +4,17 @@ extends RefCounted
 
 ## Mude sempre que o protocolo de rede ou o formato do save mudar.
 ## Cliente e servidor com versões diferentes não se conectam.
-const VERSION := "0.1.0"
+const VERSION := "0.2.0"
 
 const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 5
 
 ## Semente do mapa v0.1. Servidor e clientes geram o mesmo terreno a partir dela.
 const WORLD_SEED := 20261014
+
+## Lado do mapa em metros quando o servidor não escolhe outro (--map-size=N, de 256 a 8192).
+## O tamanho final ainda é decisão do Marcelo (1, 2 ou 4 km); até lá fica o mapa da v0.1.
+const DEFAULT_MAP_SIZE := 512.0
 
 ## Frequências (por segundo).
 const SIM_HZ := 20.0

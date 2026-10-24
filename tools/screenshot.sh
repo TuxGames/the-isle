@@ -4,6 +4,7 @@
 #
 # Uso: tools/screenshot.sh saida.png [espécie] [comandos de dev] [cam-yaw] [cam-pitch] [segundos]
 # Ex.:  tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.4 -0.25
+# Mapa maior: SERVER_ARGS="--map-size=2048" tools/screenshot.sh /tmp/b.png carnotaurus "/tp 1500 1200"
 set -u
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-godot}"
@@ -16,7 +17,7 @@ WAIT="${6:-7}"
 PORT="${PORT:-7810}"
 TMP="$(mktemp -d)"
 
-"$GODOT" --headless --path . -- --server --dev --port="$PORT" --bots="${BOTS:-30}" --save="$TMP/world.json" >"$TMP/server.log" 2>&1 &
+"$GODOT" --headless --path . -- --server --dev --port="$PORT" --bots="${BOTS:-30}" --save="$TMP/world.json" ${SERVER_ARGS:-} >"$TMP/server.log" 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 2
