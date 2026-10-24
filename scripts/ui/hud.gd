@@ -3,8 +3,8 @@ extends CanvasLayer
 ## Toda a interface: menu de conexão, barras de status, mensagens, tela de morte,
 ## pausa e caixa de chat/comandos. Montada por código pra não depender do editor.
 
-signal connect_requested(player_name: String, address: String, species_id: String)
-signal host_requested(player_name: String, species_id: String)
+signal connect_requested(player_name: String, address: String, species_id: String, password: String)
+signal host_requested(player_name: String, species_id: String, password: String)
 signal respawn_requested(species_id: String)
 signal chat_submitted(text: String)
 signal leave_requested
@@ -18,6 +18,8 @@ var death: Control
 var pause: Control
 
 var _name_edit: LineEdit
+var _pass_edit: LineEdit
+var _remember: CheckBox
 var _addr_edit: LineEdit
 var _species_menu: OptionButton
 var _menu_status: Label
@@ -98,6 +100,16 @@ func _build_menu() -> void:
 	_name_edit.max_length = 16
 	_name_edit.placeholder_text = "ex.: Marcelo"
 	box.add_child(_name_edit)
+	box.add_child(_label("Senha (na primeira vez, a que você digitar vira a sua)", 14))
+	_pass_edit = LineEdit.new()
+	_pass_edit.secret = true
+	_pass_edit.max_length = 64
+	box.add_child(_pass_edit)
+	_remember = CheckBox.new()
+	_remember.text = "Lembrar a senha neste PC"
+	_remember.button_pressed = true
+	box.add_child(_remember)
+	_name_edit.text_changed.connect(func(_t): _update_pass_hint())
 	box.add_child(_label("Endereço do servidor", 14))
 	_addr_edit = LineEdit.new()
 	_addr_edit.placeholder_text = "IP do Tailscale do servidor, ex.: 100.64.0.5"
@@ -109,12 +121,13 @@ func _build_menu() -> void:
 	join.text = "Entrar no servidor"
 	join.custom_minimum_size = Vector2(0, 40)
 	join.pressed.connect(func():
-		connect_requested.emit(_name_edit.text.strip_edges(), _addr_edit.text.strip_edges(), _selected_species(_species_menu)))
+		connect_requested.emit(_name_edit.text.strip_edges(), _addr_edit.text.strip_edges(),
+				_selected_species(_species_menu), _pass_edit.text))
 	box.add_child(join)
 	var host := Button.new()
 	host.text = "Testar sozinho (abre um servidor neste PC)"
 	host.pressed.connect(func():
-		host_requested.emit(_name_edit.text.strip_edges(), _selected_species(_species_menu)))
+		host_requested.emit(_name_edit.text.strip_edges(), _selected_species(_species_menu), _pass_edit.text))
 	box.add_child(host)
 	_menu_status = _label("", 14, Color(1.0, 0.75, 0.5))
 	_menu_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -411,6 +424,9 @@ func close_chat() -> void:
 
 const PREFS_PATH := "user://cliente.cfg"
 
+## Chave da senha lembrada (nunca a senha): {"name": nome, "key": Accounts.client_key}.
+var _remembered := {}
+
 
 func _load_prefs() -> void:
 	var cfg := ConfigFile.new()
@@ -418,16 +434,43 @@ func _load_prefs() -> void:
 		_name_edit.text = cfg.get_value("cliente", "nome", "")
 		_addr_edit.text = cfg.get_value("cliente", "endereco", "127.0.0.1")
 		_species_menu.selected = int(cfg.get_value("cliente", "especie", 0))
+		_remember.button_pressed = bool(cfg.get_value("cliente", "lembrar_senha", true))
+		var key := String(cfg.get_value("cliente", "chave", ""))
+		if Accounts.is_valid_key(key):
+			_remembered = {"name": String(cfg.get_value("cliente", "chave_nome", "")), "key": key}
 	else:
 		_addr_edit.text = "127.0.0.1"
+	_update_pass_hint()
 
 
-func save_prefs() -> void:
+## Grava nome, servidor e espécie. Com "lembrar" marcado, guarda também a chave da senha.
+func save_prefs(key: String) -> void:
+	if _remember.button_pressed and Accounts.is_valid_key(key):
+		_remembered = {"name": _name_edit.text.strip_edges(), "key": key}
+	elif not _remember.button_pressed:
+		_remembered = {}
 	var cfg := ConfigFile.new()
 	cfg.set_value("cliente", "nome", _name_edit.text)
 	cfg.set_value("cliente", "endereco", _addr_edit.text)
 	cfg.set_value("cliente", "especie", _species_menu.selected)
+	cfg.set_value("cliente", "lembrar_senha", _remember.button_pressed)
+	cfg.set_value("cliente", "chave_nome", String(_remembered.get("name", "")))
+	cfg.set_value("cliente", "chave", String(_remembered.get("key", "")))
 	cfg.save(PREFS_PATH)
+	_pass_edit.text = ""
+	_update_pass_hint()
+
+
+## Chave lembrada pra esse nome, ou "".
+func remembered_key(player_name: String) -> String:
+	if String(_remembered.get("name", "")).to_lower() == player_name.strip_edges().to_lower():
+		return String(_remembered.get("key", ""))
+	return ""
+
+
+func _update_pass_hint() -> void:
+	var has_key := remembered_key(_name_edit.text) != ""
+	_pass_edit.placeholder_text = "senha lembrada neste PC" if has_key else "sua senha"
 
 
 func fill_menu(player_name: String, address: String, species_id: String) -> void:

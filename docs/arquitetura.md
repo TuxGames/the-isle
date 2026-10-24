@@ -56,7 +56,9 @@ Cliente → servidor:
 
 | RPC | Modo | Conteúdo |
 |---|---|---|
-| `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo |
+| `c_password(chave)` | confiável | chave da senha (`Accounts.client_key`), mandada logo antes do `c_login` |
+| `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo. Nunca muda de assinatura: um jogo de outra versão ainda recebe "versão diferente" |
+| `c_set_password(chave atual, chave nova)` | confiável | troca de senha; a resposta vem por `s_message` |
 | `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
 | `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer, comando dev, chat |
 
@@ -64,7 +66,7 @@ Servidor → cliente:
 
 | RPC | Conteúdo |
 |---|---|
-| `s_welcome(info)` | id da entidade, espécie, semente e tamanho do mapa (`map_size`), se foi restaurado, modo dev |
+| `s_welcome(info)` | id da entidade, nome (como foi cadastrado), se a conta acabou de ser criada, espécie, semente e tamanho do mapa (`map_size`), se foi restaurado, modo dev |
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando, nadando, andando) |
@@ -80,6 +82,14 @@ O golpe é um segmento vertical saindo da boca/chifre (`attack_point`), descendo
 `attack_reach_down`, pra um bicho grande conseguir morder um pequeno no chão. Acerta se o
 segmento (com raio) encostar em alguma esfera do alvo, no fim da preparação do golpe
 (`attack_windup`). A parte atingida muda o dano.
+
+## Contas (`<save>.contas.json`)
+
+`scripts/net/accounts.gd`. Nome (sem diferença de maiúsculas) → nome como foi cadastrado, sal
+aleatório e hash (PBKDF2-SHA256) da chave que o cliente manda. O cliente gera a chave com
+PBKDF2 da senha, usando o nome como sal; com "Lembrar a senha", guarda só essa chave em
+`user://cliente.cfg`. Fica fora do `world.json` pra trocar de mapa não apagar as senhas. Se o
+arquivo estiver ilegível, o servidor não sobe (não pode virar "ninguém tem senha").
 
 ## Save (`world.json`)
 

@@ -14,7 +14,7 @@ O que vem depois: [`docs/roadmap.md`](docs/roadmap.md).
 ## Jogar
 
 1. Baixe o `.zip` da última versão em **[Releases](../../releases)** e extraia.
-2. **Sozinho, pra testar:** abra `DinoSurvival.exe`, digite um nome e clique em
+2. **Sozinho, pra testar:** abra `DinoSurvival.exe`, digite um nome e uma senha e clique em
    **"Testar sozinho"**.
 3. **Com os amigos:** um PC roda o servidor (`iniciar_servidor.bat`) e todo mundo entra
    pelo IP dele. O passo a passo, com Tailscale, está no `LEIA-ME.txt` dentro do zip.

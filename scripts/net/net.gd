@@ -78,6 +78,21 @@ func c_action(action: int, arg: String) -> void:
 		server.on_action(multiplayer.get_remote_sender_id(), action, arg)
 
 
+## Chave da senha (Accounts.client_key), mandada logo antes do c_login. Fica separada do
+## c_login pra ele não mudar: um jogo de outra versão ainda recebe "versão diferente".
+@rpc("any_peer", "call_remote", "reliable")
+func c_password(key: String) -> void:
+	if server:
+		server.on_password(multiplayer.get_remote_sender_id(), key)
+
+
+## Troca de senha (aba Conta). A resposta vem por s_message.
+@rpc("any_peer", "call_remote", "reliable")
+func c_set_password(old_key: String, new_key: String) -> void:
+	if server:
+		server.on_change_password(multiplayer.get_remote_sender_id(), old_key, new_key)
+
+
 # ============================================================ servidor → cliente
 
 @rpc("authority", "call_remote", "reliable")

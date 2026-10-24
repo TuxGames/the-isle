@@ -31,7 +31,7 @@ O `.github/workflows/release.yml` vê que essa versão ainda não tem Release, r
 zip do Windows, cria a tag `vX.Y.Z` e publica. (Também publica se alguém der push numa tag `vX.Y.Z`.)
 
 Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30` (mapa maior: `--map-size=2048`)
-Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux` (ou sem args = menu)
+Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux --password=teste123` (ou sem args = menu)
 
 ## Regras
 

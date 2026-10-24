@@ -11,6 +11,9 @@ extends Node
 ##   bob_die     entra, morre (/kill) e confere que renasce jovem.
 ##   map_check   entra como carla e confere que o mapa tem o tamanho de --expect-map-size
 ##               e que o servidor a colocou no chão desse mesmo terreno.
+##   intruso     tenta entrar como bob com a senha errada e confere que é barrado.
+##
+## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
 var args := {}
 var role := ""
@@ -34,7 +37,7 @@ func run(p_args: Dictionary) -> void:
 	args = p_args
 	role = String(args.get("role", "alice"))
 	Net.welcome_received.connect(func(info): welcome = info; my_id = int(info["entity_id"]))
-	Net.login_failed.connect(func(r): _fail("login recusado: " + r); _finish())
+	Net.login_failed.connect(_on_login_failed)
 	Net.teleport_received.connect(func(seq, pos, yaw): my_seq = seq; my_pos = pos; my_yaw = yaw)
 	Net.self_stats_received.connect(func(st): stats = st)
 	Net.roster_received.connect(func(r): roster = r)
@@ -73,6 +76,8 @@ func _process(delta: float) -> void:
 func _on_connected() -> void:
 	var species := "carnotaurus" if role == "alice" else "dryosaurus"
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
+	var password := "chute-errado" if role == "intruso" else "senha-" + pname
+	Net.c_password.rpc_id(1, Accounts.client_key(pname, password))
 	Net.c_login.rpc_id(1, pname, species, GameConfig.VERSION)
 	match role:
 		"alice":
@@ -85,6 +90,23 @@ func _on_connected() -> void:
 			_bob_die()
 		"map_check":
 			_map_check()
+		"intruso":
+			_intruso()
+
+
+func _on_login_failed(reason: String) -> void:
+	if role == "intruso":
+		_check(reason.begins_with("Senha errada"), "barrado com a senha errada (\"%s\")" % reason)
+	else:
+		_fail("login recusado: " + reason)
+	_finish()
+
+
+## Tenta entrar como bob com a senha errada: o servidor tem que recusar, não pode dar o dino.
+func _intruso() -> void:
+	await _wait(8.0)
+	_fail("entrou como bob com a senha errada" if not welcome.is_empty() else "o servidor não respondeu")
+	_finish()
 
 
 # ---------------------------------------------------------------- utilitários

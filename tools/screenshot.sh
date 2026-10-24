@@ -27,6 +27,6 @@ EXTRA=()
 [ -n "$CMDS" ] && EXTRA+=("--cmd=$CMDS")
 timeout 90 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . \
   --rendering-driver opengl3 --rendering-method gl_compatibility --resolution 1280x720 -- \
-  --connect=127.0.0.1:"$PORT" --name=Foto --species="$SPECIES" --cam-pitch="$CAM_PITCH" \
+  --connect=127.0.0.1:"$PORT" --name=Foto --password=foto-print --species="$SPECIES" --cam-pitch="$CAM_PITCH" \
   --screenshot="$OUT" --screenshot-after="$WAIT" --auto-quit="$((WAIT + 2))" "${EXTRA[@]}" ${CLIENT_ARGS:-} >"$TMP/client.log" 2>&1
 grep -E "SCRIPT ERROR|print salvo|AUTOPILOT|ERROR" "$TMP/client.log" "$TMP/server.log" | grep -v -E "ALSA|audio_driver|status < 0"

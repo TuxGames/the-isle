@@ -7,7 +7,8 @@
 #  3. bob sai; alice confere que o dino dele sumiu e continua jogando sozinha.
 #  4. alice sai: ninguém online → o mundo tem que pausar.
 #  5. bob volta: tem que estar EXATAMENTE igual (vida, fome, sede, crescimento, posição).
-#  6. o servidor reinicia (lê o save) e o bob volta de novo, ainda igual.
+#  6. o servidor reinicia (lê o save e as contas); alguém tenta entrar como bob com a
+#     senha errada e é barrado; o bob volta com a senha certa, ainda igual.
 #  7. bob morre e renasce jovem.
 #  8-10. mapa de 1024 m: o cliente recebe o tamanho; reiniciar sem --map-size mantém o do
 #        save; reiniciar com outro tamanho guarda o save antigo à parte.
@@ -53,7 +54,8 @@ sleep 3   # ninguém online: o mundo tem que ficar parado
 client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 
 stop_server
-start_server   # reinício do servidor: o estado tem que vir do save
+start_server   # reinício do servidor: o estado e as contas têm que vir do disco
+client intruso || FAILS=$((FAILS+1))   # senha errada: barrado (a conta do bob veio do arquivo)
 client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 client bob_die || FAILS=$((FAILS+1))
 stop_server

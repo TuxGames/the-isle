@@ -132,7 +132,10 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 - Servidor autoritativo para tudo que importa (vida, fome, sede, mordida, morte, bots, relógio).
   O **movimento do próprio dino é calculado no PC do jogador** e enviado ao servidor: é um jogo
   de 5 amigos, anticheat não importa, e assim o controle fica suave mesmo com ping.
-- Identidade do jogador = **nome** (sem login). Mesmo nome = mesmo dino salvo.
+- Identidade do jogador = **nome + senha** (Tux, 24/10/2026). O primeiro a entrar com um nome
+  define a senha dele (vale pra quem já tinha dino salvo). A senha não viaja: o jogo manda uma
+  chave derivada dela, e o servidor guarda só um hash, em `<save>.contas.json`. 5 senhas erradas
+  seguidas bloqueiam o nome por 1 minuto.
 - Mapa gerado por código com semente fixa (servidor e clientes geram o mesmo terreno), com um
   rio atravessando e montanhas na borda. O **tamanho é escolhido no servidor** (`--map-size`,
   padrão 512 m, o da v0.1) e vai pros clientes no login; rio, arbustos e água escalam junto.
@@ -160,6 +163,11 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 - Cura (bem alimentado): vida cheia em ~8 min; descansando, ~4 min.
 
 ## Em aberto (perguntar ao Marcelo)
+
+- **Códigos de resgate** (ideia do Tux, 24/10): o admin cria códigos no jogo e o jogador resgata na
+  aba Conta. O que um código pode dar (crescimento? espécie? acesso antecipado?) esbarra em
+  "morreu → recomeça jovem", então o Tux vai decidir com o Marcelo. Já decidido: admins são o
+  Tux e o Marcelo.
 
 As perguntas abaixo estão num questionário pro Marcelo responder (página privada do Tux no
 claude.ai: https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7). As respostas ficam no banco da

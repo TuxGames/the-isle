@@ -3,7 +3,7 @@ DINO SURVIVAL (nome provisório) - protótipo v0.1
 
 COMO JOGAR SOZINHO (pra testar)
   1. Abra DinoSurvival.exe
-  2. Digite seu nome e clique em "Testar sozinho".
+  2. Digite seu nome e uma senha e clique em "Testar sozinho".
      Isso abre um servidor escondido neste PC e já entra nele.
 
 COMO JOGAR COM OS AMIGOS (até 5)
@@ -18,7 +18,9 @@ COMO JOGAR COM OS AMIGOS (até 5)
     2. Abra DinoSurvival.exe, digite o nome, coloque o IP do servidor
        (ex.: 100.64.0.5) e clique em "Entrar no servidor".
 
-  Use sempre o mesmo nome: é ele que guarda o seu dino.
+  Use sempre o mesmo nome e a mesma senha: são eles que guardam o seu dino.
+  Na primeira vez num servidor, a senha que você digitar vira a senha do seu nome.
+  Não use uma senha que você usa em outro lugar.
 
 O LENOVO AGUENTA? (teste de desempenho)
   No PC que vai ser o servidor, feche os outros programas e dê dois cliques em

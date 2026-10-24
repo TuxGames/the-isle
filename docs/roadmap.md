@@ -29,6 +29,12 @@
    está pronta (`testar_desempenho.bat` no zip, ou `--bench`); falta rodar no Lenovo e colar
    o resultado aqui.
 
+Extras (pedidos do Tux):
+- ✅ Login com senha (a conta guarda o seu dino; ninguém mais entra com o seu nome).
+- Tela de configurações (vídeo, controles, interface) com aba Conta (trocar senha).
+- Códigos de resgate com painel de admin (Tux e Marcelo): esperando o Marcelo dizer o que um
+  código pode dar.
+
 ## v0.3: ferimentos e rastro
 
 - Lista de ferimentos montada com o Marcelo (fratura, sangramento...) com penalidades

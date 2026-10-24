@@ -7,7 +7,7 @@ extends Node3D
 ## servidor 20x por segundo. Vida, fome, mordidas etc. quem decide é o servidor.
 ##
 ## Argumentos úteis (depois do "--"):
-##   --connect=IP[:porta] --name=Tux --species=carnotaurus   entra direto
+##   --connect=IP[:porta] --name=Tux --password=... --species=carnotaurus   entra direto
 ##   --solo                                                   abre servidor local e entra
 ##   --screenshot=arquivo.png --screenshot-after=8            tira print (testes)
 
@@ -87,9 +87,11 @@ func start(args: Dictionary) -> void:
 	if args.has("cam-pitch"):
 		cam_pitch = float(args["cam-pitch"])
 	if args.has("solo"):
-		_host(String(args.get("name", "Jogador")), String(args.get("species", "carnotaurus")))
+		_host(String(args.get("name", "Jogador")), String(args.get("species", "carnotaurus")),
+				String(args.get("password", "")))
 	elif args.has("connect"):
-		_join(String(args.get("name", "Jogador")), String(args["connect"]), String(args.get("species", "carnotaurus")))
+		_join(String(args.get("name", "Jogador")), String(args["connect"]), String(args.get("species", "carnotaurus")),
+				String(args.get("password", "")))
 	if args.has("autopilot"):
 		_autopilot()
 	if args.has("screenshot"):
@@ -121,14 +123,26 @@ func _setup_input() -> void:
 
 # ---------------------------------------------------------------- conexão
 
-func _join(player_name: String, address: String, species_id: String) -> void:
+func _join(player_name: String, address: String, species_id: String, password: String = "") -> void:
 	if player_name == "":
 		hud.set_menu_status("Digite um nome.")
 		return
 	if address == "":
 		hud.set_menu_status("Digite o endereço do servidor.")
 		return
-	hud.save_prefs()
+	# A senha vira uma chave aqui mesmo; a senha em si não sai deste PC.
+	var key := ""
+	if password != "":
+		if password.length() < Accounts.MIN_PASSWORD:
+			hud.set_menu_status("A senha precisa de pelo menos %d letras ou números." % Accounts.MIN_PASSWORD)
+			return
+		key = Accounts.client_key(player_name, password)
+	else:
+		key = hud.remembered_key(player_name)
+		if key == "":
+			hud.set_menu_status("Digite sua senha. Na primeira vez num servidor, a senha que você digitar vira a senha do seu nome.")
+			return
+	hud.save_prefs(key)
 	var host := address
 	var port := GameConfig.DEFAULT_PORT
 	if address.count(":") == 1:
@@ -139,7 +153,7 @@ func _join(player_name: String, address: String, species_id: String) -> void:
 	if err != OK:
 		hud.set_menu_status("Não consegui iniciar a conexão (%s)." % error_string(err))
 		return
-	_pending_login = {"name": player_name, "species": species_id}
+	_pending_login = {"name": player_name, "species": species_id, "key": key}
 	hud.set_menu_status("Conectando em %s:%d..." % [host, port])
 	_connect_timer = get_tree().create_timer(10.0)
 	_connect_timer.timeout.connect(func():
@@ -150,7 +164,7 @@ func _join(player_name: String, address: String, species_id: String) -> void:
 
 
 ## "Testar sozinho": abre um servidor dedicado neste PC (processo separado) e entra nele.
-func _host(player_name: String, species_id: String) -> void:
+func _host(player_name: String, species_id: String, password: String = "") -> void:
 	if player_name == "":
 		player_name = "Jogador"
 	if _server_pid <= 0:
@@ -166,10 +180,11 @@ func _host(player_name: String, species_id: String) -> void:
 			return
 		hud.set_menu_status("Abrindo servidor local...")
 		await get_tree().create_timer(2.0).timeout
-	_join(player_name, "127.0.0.1", species_id)
+	_join(player_name, "127.0.0.1", species_id, password)
 
 
 func _on_connected() -> void:
+	Net.c_password.rpc_id(1, String(_pending_login.get("key", "")))
 	Net.c_login.rpc_id(1, String(_pending_login.get("name", "Jogador")),
 			String(_pending_login.get("species", "carnotaurus")), GameConfig.VERSION)
 	hud.set_menu_status("Conectado, entrando...")
@@ -236,6 +251,8 @@ func _on_welcome(info: Dictionary) -> void:
 	stats = PackedFloat32Array()
 	hud.show_game()
 	hud.hide_death()
+	if bool(info.get("account_created", false)):
+		hud.add_message("Conta criada: \"%s\" agora tem senha. Guarde ela, é o que protege o seu dino." % String(info.get("name", "")))
 	if bool(info.get("restored", false)):
 		hud.add_message("Bem-vindo de volta! Seu %s estava te esperando." % Species.display_name(my_species))
 	else:
