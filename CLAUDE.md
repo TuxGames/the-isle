@@ -25,6 +25,11 @@ godot --headless --path . -- --bench   # teste de desempenho do servidor (5 joga
 
 A CI (`.github/workflows/testes.yml`) roda o `tools/test.sh` a cada push, em qualquer branch.
 
+Publicar uma versão pros amigos (vai pra Releases, de onde eles baixam): suba `VERSION` em
+`scripts/config.gd` e `config/version` no `project.godot` (os dois iguais) e faça o merge na `main`.
+O `.github/workflows/release.yml` vê que essa versão ainda não tem Release, roda os testes, gera o
+zip do Windows, cria a tag `vX.Y.Z` e publica. (Também publica se alguém der push numa tag `vX.Y.Z`.)
+
 Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30`
 Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux` (ou sem args = menu)
 

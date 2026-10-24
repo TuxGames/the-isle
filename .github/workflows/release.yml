@@ -1,0 +1,130 @@
+# Gera o zip do jogo pra Windows e publica em Releases.
+# - Push na main com um GameConfig.VERSION que ainda não tem Release: cria a tag vX.Y.Z
+#   nesse commit e publica. Ou seja, subiu o VERSION e fez o merge, saiu a versão.
+# - Push de uma tag vX.Y.Z (tem que bater com o VERSION): publica nessa tag.
+# - Rodando à mão (Actions → Release → Run workflow): só gera o zip, sem publicar.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GODOT_VERSION: "4.7.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir a versão
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep -E '^const VERSION' scripts/config.gd | sed -E 's/.*"(.*)".*/\1/')
+          if ! grep -q "^config/version=\"${VERSION}\"" project.godot; then
+            echo "::error::project.godot (config/version) não bate com GameConfig.VERSION (${VERSION})."
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "::error::A tag ${GITHUB_REF_NAME} não bate com GameConfig.VERSION (${VERSION}). Crie a tag v${VERSION}."
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          # Publica numa tag, ou na main quando essa versão ainda não tem Release.
+          PUBLISH=false
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            PUBLISH=true
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "A versão ${VERSION} já tem Release; nada a publicar."
+            else
+              PUBLISH=true
+            fi
+          fi
+          echo "PUBLISH=${PUBLISH}" >> "$GITHUB_ENV"
+          # Push na main sem versão nova: não precisa nem gerar o zip.
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${PUBLISH}" = "false" ]; then
+            echo "BUILD=false" >> "$GITHUB_ENV"
+          else
+            echo "BUILD=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Cache do Godot
+        if: env.BUILD == 'true'
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Baixar o Godot ${{ env.GODOT_VERSION }}
+        if: env.BUILD == 'true' && steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot
+          curl -sSfL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+
+      # Só os modelos do Windows (o pacote completo tem 1,3 GB).
+      - name: Cache dos export templates
+        if: env.BUILD == 'true'
+        id: cache-templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-templates-${{ env.GODOT_VERSION }}-windows-x86_64
+
+      - name: Baixar os export templates do Windows
+        if: env.BUILD == 'true' && steps.cache-templates.outputs.cache-hit != 'true'
+        run: |
+          DEST=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$DEST"
+          curl -sSfL -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q -j /tmp/templates.tpz templates/version.txt \
+            templates/windows_release_x86_64.exe templates/windows_release_x86_64_console.exe -d "$DEST"
+          rm /tmp/templates.tpz
+
+      - name: Testes
+        if: env.BUILD == 'true'
+        run: GODOT="$HOME/godot/godot" tools/test.sh
+
+      - name: Gerar o zip do Windows
+        if: env.BUILD == 'true'
+        run: GODOT="$HOME/godot/godot" tools/export.sh
+
+      - name: Guardar o zip no Actions
+        if: env.BUILD == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DinoSurvival-windows-v${{ env.VERSION }}
+          path: build/DinoSurvival-windows-v${{ env.VERSION }}.zip
+          retention-days: 14
+
+      - name: Publicar em Releases
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="build/DinoSurvival-windows-v${VERSION}.zip"
+          cat > /tmp/notas.md <<EOF
+          Dino Survival ${VERSION} para Windows.
+
+          1. Baixe o **DinoSurvival-windows-v${VERSION}.zip** aqui embaixo e extraia numa pasta.
+          2. Abra o **LEIA-ME.txt**: explica como testar sozinho, como jogar com os amigos (Tailscale) e como deixar o servidor ligado.
+          3. No PC que vai ser o servidor, dê dois cliques em **testar_desempenho.bat** pra ver se ele aguenta.
+
+          O Windows pode avisar que o app é de um editor desconhecido: clique em "Mais informações" e depois em "Executar assim mesmo".
+          Servidor e jogadores precisam estar na mesma versão.
+          EOF
+          TAG="v${VERSION}"
+          gh release create "$TAG" "$ZIP" --target "${GITHUB_SHA}" --title "Dino Survival ${VERSION}" \
+            --notes-file /tmp/notas.md || gh release upload "$TAG" "$ZIP" --clobber
