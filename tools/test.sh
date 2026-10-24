@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Roda tudo: compilação, testes de unidade e teste de rede. Use antes de todo commit.
+# pipefail: sem ele o `| grep` esconde a falha do teste de rede e o script sai com 0.
+set -o pipefail
 cd "$(dirname "$0")/.." || exit 1
 GODOT="${GODOT:-godot}"
 ./tools/check.sh || exit 1

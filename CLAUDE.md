@@ -22,6 +22,8 @@ tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.9 -0
 tools/export.sh       # gera build/DinoSurvival.exe (precisa dos export templates)
 ```
 
+A CI (`.github/workflows/testes.yml`) roda o `tools/test.sh` a cada push, em qualquer branch.
+
 Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30`
 Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux` (ou sem args = menu)
 
