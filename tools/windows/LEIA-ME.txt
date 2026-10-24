@@ -20,6 +20,12 @@ COMO JOGAR COM OS AMIGOS (até 5)
 
   Use sempre o mesmo nome: é ele que guarda o seu dino.
 
+O LENOVO AGUENTA? (teste de desempenho)
+  No PC que vai ser o servidor, feche os outros programas e dê dois cliques em
+  testar_desempenho.bat. Leva cerca de 1 minuto, não precisa de internet e não
+  mexe no mundo salvo. No fim aparece um VEREDITO, e o resultado fica salvo em
+  resultado_desempenho.txt, na mesma pasta.
+
 CONTROLES
   W A S D ..... andar (o dino vai pra onde a câmera aponta)
   Shift ....... correr (gasta fôlego)

@@ -293,7 +293,9 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				d.last_attacker_id = 0
 				reply = "Morte forçada"
 			"/bots":
-				reply = "Bots: %d (alvo %d)" % [sim.bot_count(), sim.bot_target]
+				var tiers := sim.sim_tier_counts()
+				reply = "Bots: %d (alvo %d) · perto %d · longe %d · congelados %d" % [
+					sim.bot_count(), sim.bot_target, tiers["full"], tiers["reduced"], tiers["frozen"]]
 			"/spawn":
 				var sp_id := parts[1] if parts.size() > 1 else "dryosaurus"
 				if not Species.is_valid(sp_id):
@@ -348,11 +350,12 @@ func _broadcast_message(text: String) -> void:
 		Net.s_message.rpc_id(pid, text)
 
 
-func build_snapshot() -> PackedFloat32Array:
+## Estado de todos os dinos e carcaças, igual pra todos os jogadores (8 floats cada).
+static func build_snapshot(world: WorldSim) -> PackedFloat32Array:
 	var data := PackedFloat32Array()
-	data.resize((sim.dinos.size() + sim.carcasses.size()) * Net.SNAP_STRIDE)
+	data.resize((world.dinos.size() + world.carcasses.size()) * Net.SNAP_STRIDE)
 	var i := 0
-	for d in sim.dinos.values():
+	for d in world.dinos.values():
 		var flags := 0
 		if d.sprinting and d.moving_speed > Metabolism.MOVING_EPS:
 			flags |= Net.SF_SPRINT
@@ -366,11 +369,11 @@ func build_snapshot() -> PackedFloat32Array:
 			flags |= Net.SF_PLAYER
 		if d.health_ratio() < Movement.LIMP_HEALTH:
 			flags |= Net.SF_LIMP
-		if Movement.is_swimming(sim.terrain, d.pos.x, d.pos.z, d.body_height()):
+		if Movement.is_swimming(world.terrain, d.pos.x, d.pos.z, d.body_height()):
 			flags |= Net.SF_SWIM
 		_put(data, i, d.id, Species.index_of(d.species), d.growth, d.pos, d.yaw, flags)
 		i += Net.SNAP_STRIDE
-	for c in sim.carcasses.values():
+	for c in world.carcasses.values():
 		_put(data, i, c["id"], Species.index_of(c["species"]), c["growth"], c["pos"], c["yaw"], Net.SF_DEAD)
 		i += Net.SNAP_STRIDE
 	return data
@@ -389,7 +392,7 @@ static func _put(data: PackedFloat32Array, i: int, id: int, sp: int, growth: flo
 
 
 func _send_snapshots() -> void:
-	var data := build_snapshot()
+	var data := build_snapshot(sim)
 	for pid in peers:
 		Net.s_snapshot.rpc_id(pid, data)
 

@@ -15,12 +15,15 @@ Jogo de sobrevivência com dinossauros pra até 5 amigos, inspirado em The Isle.
 
 ```bash
 tools/check.sh        # todos os scripts compilam?
-tools/test.sh         # compilação + 34 testes de unidade + teste de rede (rode antes de todo commit)
+tools/test.sh         # compilação + testes de unidade + teste de rede (rode antes de todo commit)
 tools/net_test.sh     # só o teste de rede (servidor + clientes reais headless)
 godot --headless --path . -s tests/run_tests.gd -- --only=nome   # filtra testes
 tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.9 -0.2   # print do jogo
 tools/export.sh       # gera build/DinoSurvival.exe (precisa dos export templates)
+godot --headless --path . -- --bench   # teste de desempenho do servidor (5 jogadores + 70 bots)
 ```
+
+A CI (`.github/workflows/testes.yml`) roda o `tools/test.sh` a cada push, em qualquer branch.
 
 Rodar o servidor: `godot --headless --path . -- --server --dev --bots=30`
 Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux` (ou sem args = menu)
