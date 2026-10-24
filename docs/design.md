@@ -43,7 +43,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Bem mais herbívoros que carnívoros, "mas não muito mais" | ✅ (65% / 35%) |
 | Carnívoros também se atacam entre si | ✅ (carnívoro com fome ataca carnívoro menor; canibalismo só morrendo de fome) |
 | **Hitbox plausível**: só toma dano se a mordida realmente acertar | ✅ |
-| A maioria dos bots fica congelada (longe dos jogadores) | 🟡 congelamento pronto (ver seção 5), mas no mapa de 512 m quase nada fica longe o bastante. Vale de verdade com o mapa maior |
+| A maioria dos bots fica congelada (longe dos jogadores) | 🟡 congelamento pronto (ver seção 5). No mapa de 512 m quase nada fica longe o bastante; com 2 km e 70 bots, 40 a 66 ficam congelados (`--bench --map-size=2048`) |
 | **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 |
 | Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ⬜ |
 | Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ⬜ |
@@ -59,7 +59,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 
 | Decisão | Status |
 |---|---|
-| Mapa grande, mas só carrega a área num raio grande em volta de cada jogador | ⬜ (o mapa da v0.1 é pequeno e carrega inteiro) |
+| Mapa grande, mas só carrega a área num raio grande em volta de cada jogador | 🟡 pronto pra qualquer tamanho (`--map-size`, de 256 m a 8 km): o cliente só desenha ~1,1 km em volta do jogador, com menos detalhe longe. O padrão continua 512 m até o Marcelo decidir o tamanho |
 | Simulação por faixas de distância (exemplo do Marcelo: >15 células estático; ~10 começa a ativar; ≤5 normal) | ✅ com células de 32 m: até 160 m roda normal (20 Hz); mais longe roda a 10 Hz; congela acima de 480 m e só acorda a 320 m (histerese). Metros escolhidos pelo Tux, falta o Marcelo confirmar |
 | Bot longe congelado: ferido continua ferido, luta congela | ✅ e enquanto congelado ninguém enxerga, persegue ou morde ele |
 | A distância considera o jogador mais próximo, não só o host | ✅ |
@@ -133,8 +133,10 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
   O **movimento do próprio dino é calculado no PC do jogador** e enviado ao servidor: é um jogo
   de 5 amigos, anticheat não importa, e assim o controle fica suave mesmo com ping.
 - Identidade do jogador = **nome** (sem login). Mesmo nome = mesmo dino salvo.
-- Mapa v0.1: **512 m × 512 m** gerado por código com semente fixa (servidor e clientes geram
-  o mesmo terreno), com um rio atravessando e montanhas na borda. O mapa definitivo vem depois.
+- Mapa gerado por código com semente fixa (servidor e clientes geram o mesmo terreno), com um
+  rio atravessando e montanhas na borda. O **tamanho é escolhido no servidor** (`--map-size`,
+  padrão 512 m, o da v0.1) e vai pros clientes no login; rio, arbustos e água escalam junto.
+  O mapa definitivo vem depois.
 - Os modelos da v0.1 são montados **a partir das próprias esferas da hitbox**: o que se vê é
   exatamente o que a mordida acerta. Saem quando entrarem modelos 3D de verdade.
 - Save do servidor: um JSON (`world.json`), gravado a cada 30 s, a cada saída e a cada morte.
@@ -170,7 +172,8 @@ página, coleção `respostas`, documento `marcelo`. Quando chegarem, passe as d
 - Reprodução entre jogador e bot vale?
 - Proteção contra sair do jogo no meio da luta (sugestão do ChatGPT, não decidida).
 - Neve acumulada derrete aos poucos depois da nevasca? (a pergunta ficou sem resposta)
-- Tamanho do mapa final.
+- Tamanho do mapa final (pergunta 1 do questionário: 1, 2 ou 4 km). O código já aceita
+  qualquer um; falta a escolha. Depois disso sobe o padrão de bots pra ~70 (roadmap v0.2, etapa 3).
 - Tamanho da "célula" do exemplo das distâncias. Usamos 32 m (160 / 320 / 480 m). Está bom?
 - Equilíbrio: na v0.1 um triceratops adulto mata um carnotauro adulto parado com 6 chifradas
   na cabeça. Está bom assim?

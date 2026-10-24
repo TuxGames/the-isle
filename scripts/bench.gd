@@ -6,7 +6,7 @@ extends RefCounted
 ## Não abre rede nem mexe no save de verdade.
 ##
 ##   DinoSurvival.console.exe --headless -- --bench      (ou testar_desempenho.bat)
-##   godot --headless --path . -- --bench --bots=100 --seconds=60
+##   godot --headless --path . -- --bench --bots=100 --seconds=60 --map-size=2048
 
 const PLAYER_SPECIES := ["carnotaurus", "triceratops", "dryosaurus", "carnotaurus", "triceratops"]
 const GB := 1024.0 * 1024.0 * 1024.0
@@ -19,6 +19,7 @@ static func run(args: Dictionary) -> int:
 	var bots := clampi(int(args.get("bots", 70)), 0, GameConfig.BOT_MAX)
 	var players := clampi(int(args.get("players", GameConfig.MAX_PLAYERS)), 1, GameConfig.MAX_PLAYERS)
 	var seconds := maxf(5.0, float(args.get("seconds", 120.0)))
+	var map_size := Terrain.normalize_size(float(args.get("map-size", GameConfig.DEFAULT_MAP_SIZE)))
 	var lines: Array[String] = []
 
 	_say(lines, "== Teste de desempenho do servidor (Dino Survival %s) ==" % GameConfig.VERSION)
@@ -35,9 +36,9 @@ static func run(args: Dictionary) -> int:
 	var spikes := false
 	var slow_save := 0.0
 	for together in [true, false]:
-		_say(lines, "Cenário: %d jogador(es) %s, %d bots, %.0f s de mundo..." % [
-			players, "juntos" if together else "espalhados", bots, seconds])
-		var r := run_scenario(bots, players, seconds, together)
+		_say(lines, "Cenário: %d jogador(es) %s, %d bots, mapa de %d m, %.0f s de mundo..." % [
+			players, "juntos" if together else "espalhados", bots, map_size, seconds])
+		var r := run_scenario(bots, players, seconds, together, map_size)
 		_say(lines, "  simulação: %.2f ms por passo em média · 95%% dos passos até %.2f ms · pior %.1f ms" % [
 			r["step_avg_ms"], r["step_p95_ms"], r["step_max_ms"]])
 		var kb_s: float = r["snap_kb"] * GameConfig.SNAPSHOT_HZ
@@ -84,8 +85,9 @@ static func run(args: Dictionary) -> int:
 
 ## Um cenário: os jogadores andam em grupo atrás do primeiro, ou cada um pro seu lado.
 ## Devolve os tempos medidos (ms), o tamanho do snapshot (KB) e a média de bots por faixa.
-static func run_scenario(bots: int, players: int, seconds: float, together: bool) -> Dictionary:
-	var w := WorldSim.new(GameConfig.WORLD_SEED, bots)
+static func run_scenario(bots: int, players: int, seconds: float, together: bool,
+		map_size: float = GameConfig.DEFAULT_MAP_SIZE) -> Dictionary:
+	var w := WorldSim.new(GameConfig.WORLD_SEED, bots, map_size)
 	w.populate()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
@@ -202,7 +204,7 @@ static func _enter(w: WorldSim, player_name: String, species: String, pos: Vecto
 	var d: Dino = w.login_player(player_name, species)["dino"]
 	d.growth = 1.0
 	d.health = d.max_health()
-	d.pos = Terrain.clamp_to_play_area(pos)
+	d.pos = w.terrain.clamp_to_play_area(pos)
 	d.pos.y = Movement.ground_y(w.terrain, d.pos.x, d.pos.z, d.body_height())
 	return d
 
@@ -225,7 +227,7 @@ static func _walk(w: WorldSim, p: Dino, target: Vector3, dt: float) -> bool:
 	var v := Movement.speeds(p).x
 	p.yaw = atan2(delta.x, delta.z)
 	p.pos += delta / dist * minf(v * dt, dist)
-	p.pos = Terrain.clamp_to_play_area(p.pos)
+	p.pos = w.terrain.clamp_to_play_area(p.pos)
 	p.pos.y = Movement.ground_y(w.terrain, p.pos.x, p.pos.z, p.body_height())
 	p.moving_speed = v
 	p.sprinting = false

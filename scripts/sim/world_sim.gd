@@ -4,7 +4,8 @@ extends RefCounted
 ## Não sabe nada de rede: o servidor chama step() e lê `events`.
 ## Isso permite testar toda a lógica do jogo sem abrir conexão.
 
-const SAVE_FORMAT := 1
+## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
+const SAVE_FORMAT := 2
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -44,8 +45,9 @@ var _grid := {}
 var _step_index := 0
 
 
-func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET) -> void:
-	terrain = Terrain.get_shared(p_seed)
+func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET,
+		p_map_size: float = GameConfig.DEFAULT_MAP_SIZE) -> void:
+	terrain = Terrain.get_shared(p_seed, p_map_size)
 	rng.seed = p_seed * 31 + 7
 	bot_target = clampi(p_bot_target, 0, GameConfig.BOT_MAX)
 	bush_food.resize(terrain.bushes.size())
@@ -342,7 +344,7 @@ func _separate_bots() -> void:
 			var push := delta / dist * (min_d - dist) * share
 			b.pos.x += push.x
 			b.pos.z += push.y
-			b.pos = Terrain.clamp_to_play_area(b.pos)
+			b.pos = terrain.clamp_to_play_area(b.pos)
 			b.pos.y = Movement.ground_y(terrain, b.pos.x, b.pos.z, b.body_height())
 
 
@@ -593,6 +595,7 @@ func to_save() -> Dictionary:
 		"format": SAVE_FORMAT,
 		"version": GameConfig.VERSION,
 		"seed": terrain.seed_value,
+		"map_size": terrain.size,
 		"world_time": world_time,
 		"next_id": next_id,
 		"bots": bot_list,
@@ -603,7 +606,23 @@ func to_save() -> Dictionary:
 	}
 
 
+## Tamanho do mapa de um save. Save da v0.1 (formato 1) não grava: era sempre 512 m.
+static func save_map_size(data: Dictionary) -> float:
+	return Terrain.normalize_size(float(data.get("map_size", 512.0)))
+
+
+## Por que um save não serve pra este mundo ("" = serve). Mapa diferente (semente ou tamanho)
+## deixaria os dinos salvos em lugares que não existem mais.
+func save_mismatch(data: Dictionary) -> String:
+	if int(data.get("seed", -1)) != terrain.seed_value:
+		return "o save é de outro mapa (semente %d, este é %d)" % [int(data.get("seed", -1)), terrain.seed_value]
+	if save_map_size(data) != terrain.size:
+		return "o save é de um mapa de %d m (este é de %d m)" % [int(save_map_size(data)), int(terrain.size)]
+	return ""
+
+
 ## Carrega um save. Jogadores ficam só nos registros (entram de novo quando conectam).
+## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))
