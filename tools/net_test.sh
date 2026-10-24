@@ -58,6 +58,8 @@ start_server   # reinício do servidor: o estado e as contas têm que vir do dis
 client intruso || FAILS=$((FAILS+1))   # senha errada: barrado (a conta do bob veio do arquivo)
 client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 client bob_die || FAILS=$((FAILS+1))
+client troca_senha || FAILS=$((FAILS+1))   # troca a senha da dani (com a atual errada não troca)
+client dani_nova || FAILS=$((FAILS+1))     # e ela entra com a senha nova
 stop_server
 
 # Mapa de outro tamanho, num save à parte:

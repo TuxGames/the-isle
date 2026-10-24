@@ -49,6 +49,7 @@ signal teleport_received(seq: int, pos: Vector3, yaw: float)
 signal event_received(kind: int, a: int, b: int, value: float, text: String)
 signal died(cause: String)
 signal message_received(text: String)
+signal password_changed(ok: bool, text: String)
 
 ## GameServer quando este processo é o servidor; null no cliente.
 var server: Node = null
@@ -86,7 +87,7 @@ func c_password(key: String) -> void:
 		server.on_password(multiplayer.get_remote_sender_id(), key)
 
 
-## Troca de senha (aba Conta). A resposta vem por s_message.
+## Troca de senha (aba Conta). A resposta vem por s_password_changed.
 @rpc("any_peer", "call_remote", "reliable")
 func c_set_password(old_key: String, new_key: String) -> void:
 	if server:
@@ -138,6 +139,12 @@ func s_died(cause: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_message(text: String) -> void:
 	message_received.emit(text)
+
+
+## Resposta do c_set_password.
+@rpc("authority", "call_remote", "reliable")
+func s_password_changed(ok: bool, text: String) -> void:
+	password_changed.emit(ok, text)
 
 
 # ============================================================ conexão (cliente)

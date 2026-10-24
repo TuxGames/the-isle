@@ -16,6 +16,8 @@ var menu: Control
 var game: Control
 var death: Control
 var pause: Control
+## Configurações (criado em setup_settings, que o GameClient chama com o objeto Settings).
+var settings_panel: SettingsPanel
 
 var _name_edit: LineEdit
 var _pass_edit: LineEdit
@@ -129,6 +131,10 @@ func _build_menu() -> void:
 	host.pressed.connect(func():
 		host_requested.emit(_name_edit.text.strip_edges(), _selected_species(_species_menu), _pass_edit.text))
 	box.add_child(host)
+	var cfg := Button.new()
+	cfg.text = "Configurações"
+	cfg.pressed.connect(func(): open_settings())
+	box.add_child(cfg)
 	_menu_status = _label("", 14, Color(1.0, 0.75, 0.5))
 	_menu_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_menu_status.custom_minimum_size = Vector2(390, 0)
@@ -288,6 +294,10 @@ func _build_pause() -> void:
 	cont.text = "Continuar"
 	cont.pressed.connect(func(): pause.visible = false)
 	box.add_child(cont)
+	var cfg := Button.new()
+	cfg.text = "Configurações"
+	cfg.pressed.connect(func(): open_settings())
+	box.add_child(cfg)
 	var leave := Button.new()
 	leave.text = "Sair do servidor"
 	leave.pressed.connect(func(): leave_requested.emit())
@@ -341,11 +351,48 @@ func toggle_pause() -> void:
 
 
 func is_blocking_input() -> bool:
-	return menu.visible or death.visible or pause.visible or _chat.visible
+	return menu.visible or death.visible or pause.visible or _chat.visible \
+			or (settings_panel != null and settings_panel.visible)
 
 
 func toggle_help() -> void:
 	_help.visible = not _help.visible
+
+
+func set_help_visible(on: bool) -> void:
+	_help.visible = on
+
+
+func is_help_visible() -> bool:
+	return _help.visible
+
+
+func setup_settings(settings: Settings) -> void:
+	settings_panel = SettingsPanel.create(settings)
+	settings_panel.visible = false
+	add_child(settings_panel)
+	_help.visible = settings.show_help
+
+
+## Abre as configurações por cima do que estiver na tela (menu ou Esc).
+func open_settings(tab: String = "") -> void:
+	if settings_panel:
+		settings_panel.open(tab)
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func close_settings() -> void:
+	if settings_panel:
+		settings_panel.visible = false
+
+
+func is_settings_open() -> bool:
+	return settings_panel != null and settings_panel.visible
+
+
+func set_account(player_name: String) -> void:
+	if settings_panel:
+		settings_panel.set_account(player_name)
 
 
 # ---------------------------------------------------------------- dados
@@ -459,6 +506,12 @@ func save_prefs(key: String) -> void:
 	cfg.save(PREFS_PATH)
 	_pass_edit.text = ""
 	_update_pass_hint()
+
+
+## Apaga a chave lembrada neste PC (aba Conta).
+func forget_key() -> void:
+	_remember.button_pressed = false
+	save_prefs("")
 
 
 ## Chave lembrada pra esse nome, ou "".

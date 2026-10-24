@@ -58,7 +58,7 @@ Cliente → servidor:
 |---|---|---|
 | `c_password(chave)` | confiável | chave da senha (`Accounts.client_key`), mandada logo antes do `c_login` |
 | `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo. Nunca muda de assinatura: um jogo de outra versão ainda recebe "versão diferente" |
-| `c_set_password(chave atual, chave nova)` | confiável | troca de senha; a resposta vem por `s_message` |
+| `c_set_password(chave atual, chave nova)` | confiável | troca de senha; a resposta vem por `s_password_changed` |
 | `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
 | `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer, comando dev, chat |
 
@@ -74,6 +74,7 @@ Servidor → cliente:
 | `s_roster(dict)` | id → nome dos jogadores online |
 | `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte |
 | `s_died(causa)`, `s_message(texto)` | morte do próprio jogador; mensagens/chat |
+| `s_password_changed(ok, texto)` | resposta da troca de senha (o cliente atualiza a senha lembrada) |
 
 ## Hitbox
 
@@ -82,6 +83,12 @@ O golpe é um segmento vertical saindo da boca/chifre (`attack_point`), descendo
 `attack_reach_down`, pra um bicho grande conseguir morder um pequeno no chão. Acerta se o
 segmento (com raio) encostar em alguma esfera do alvo, no fim da preparação do golpe
 (`attack_windup`). A parte atingida muda o dano.
+
+## Configurações do jogador (`user://configuracoes.cfg`)
+
+`scripts/client/settings.gd` guarda e confere as opções; `scripts/ui/settings_panel.gd` é a tela
+(menu e Esc); o `GameClient` aplica (janela, câmera, `TerrainView.set_view_distance`/`set_shadows`,
+sensibilidade). Nada disso vai pro servidor, menos a troca de senha da aba Conta.
 
 ## Contas (`<save>.contas.json`)
 

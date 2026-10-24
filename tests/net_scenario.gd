@@ -12,6 +12,9 @@ extends Node
 ##   map_check   entra como carla e confere que o mapa tem o tamanho de --expect-map-size
 ##               e que o servidor a colocou no chão desse mesmo terreno.
 ##   intruso     tenta entrar como bob com a senha errada e confere que é barrado.
+##   troca_senha entra como dani, tenta trocar a senha com a atual errada (recusado) e
+##               depois com a certa (aceito).
+##   dani_nova   entra como dani com a senha nova.
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -76,7 +79,11 @@ func _process(delta: float) -> void:
 func _on_connected() -> void:
 	var species := "carnotaurus" if role == "alice" else "dryosaurus"
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
+	if role in ["troca_senha", "dani_nova"]:
+		pname = "dani"
 	var password := "chute-errado" if role == "intruso" else "senha-" + pname
+	if role == "dani_nova":
+		password = "nova-dani"
 	Net.c_password.rpc_id(1, Accounts.client_key(pname, password))
 	Net.c_login.rpc_id(1, pname, species, GameConfig.VERSION)
 	match role:
@@ -92,6 +99,10 @@ func _on_connected() -> void:
 			_map_check()
 		"intruso":
 			_intruso()
+		"troca_senha":
+			_troca_senha()
+		"dani_nova":
+			_dani_nova()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -99,6 +110,30 @@ func _on_login_failed(reason: String) -> void:
 		_check(reason.begins_with("Senha errada"), "barrado com a senha errada (\"%s\")" % reason)
 	else:
 		_fail("login recusado: " + reason)
+	_finish()
+
+
+func _troca_senha() -> void:
+	var answers: Array = []
+	Net.password_changed.connect(func(ok, text): answers.append([ok, text]))
+	if not await _wait_for(func(): return not welcome.is_empty(), 10.0):
+		_fail("não entrou")
+		return _finish()
+	Net.c_set_password.rpc_id(1, Accounts.client_key("dani", "chute"), Accounts.client_key("dani", "nova-dani"))
+	if not await _wait_for(func(): return answers.size() >= 1, 10.0):
+		_fail("sem resposta da troca de senha")
+		return _finish()
+	_check(not answers[0][0], "senha atual errada: não troca (\"%s\")" % answers[0][1])
+	Net.c_set_password.rpc_id(1, Accounts.client_key("dani", "senha-dani"), Accounts.client_key("dani", "nova-dani"))
+	if not await _wait_for(func(): return answers.size() >= 2, 10.0):
+		_fail("sem resposta da segunda troca")
+		return _finish()
+	_check(answers[1][0], "senha atual certa: troca (\"%s\")" % answers[1][1])
+	_finish()
+
+
+func _dani_nova() -> void:
+	_check(await _wait_for(func(): return not welcome.is_empty(), 10.0), "entrou com a senha nova")
 	_finish()
 
 

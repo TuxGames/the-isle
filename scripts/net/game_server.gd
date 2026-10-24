@@ -206,7 +206,8 @@ func on_change_password(peer_id: int, old_key: String, new_key: String) -> void:
 	var player_name := String(peers[peer_id]["name"])
 	var now := Time.get_unix_time_from_system()
 	var reply := ""
-	match accounts.change_key(player_name, old_key, new_key, now):
+	var result := accounts.change_key(player_name, old_key, new_key, now)
+	match result:
 		Accounts.Result.OK:
 			_save_accounts()
 			_log("[conta] %s trocou a senha" % player_name)
@@ -217,7 +218,7 @@ func on_change_password(peer_id: int, old_key: String, new_key: String) -> void:
 			reply = "Muitas senhas erradas. Espere %d segundos." % ceili(accounts.lock_seconds_left(player_name, now))
 		Accounts.Result.BAD_KEY:
 			reply = "A senha nova precisa de pelo menos %d letras ou números." % Accounts.MIN_PASSWORD
-	Net.s_message.rpc_id(peer_id, reply)
+	Net.s_password_changed.rpc_id(peer_id, result == Accounts.Result.OK, reply)
 
 
 func _welcome_info(dino: Dino, restored: bool, player_name: String, account_created: bool) -> Dictionary:

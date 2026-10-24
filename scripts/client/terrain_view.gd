@@ -25,6 +25,10 @@ const LOD_STEP := [2.0, 4.0, 8.0, 16.0]
 const LOD_BUSHES := [true, true, false, false]
 ## Folga pra um pedaço na divisa entre dois níveis não ficar trocando de um pro outro.
 const LOD_HYSTERESIS := 24.0
+## Distância de visão máxima (igual ao último LOD_DIST) e a neblina que combina com ela.
+## Com distância menor (configurações), a neblina engrossa na mesma proporção pra esconder a borda.
+const MAX_VIEW_DIST := 1150.0
+const FOG_DENSITY := 0.0012
 ## Tempo por quadro pra montar pedaços. Pedaço perto que falta, e o pedaço embaixo do
 ## jogador, são montados na hora mesmo passando disso (o chão dele nunca pode faltar).
 const BUILD_BUDGET_MS := 4.0
@@ -41,6 +45,10 @@ var _ground_mat: StandardMaterial3D
 var _bush_mesh: SphereMesh
 var _tint := FastNoiseLite.new()
 var _refresh_t := 0.0
+## Até onde desenhar o terreno (configurações → distância de visão).
+var view_distance := MAX_VIEW_DIST
+var _env: Environment
+var _sun: DirectionalLight3D
 
 
 static func build(t: Terrain) -> TerrainView:
@@ -56,11 +64,13 @@ static func build(t: Terrain) -> TerrainView:
 # ---------------------------------------------------------------- quais pedaços
 
 ## Pedaços que devem estar carregados com o jogador em `focus`: {Vector2i: nível de detalhe}.
-## `current` é o que já está carregado ({Vector2i: nível}), pra histerese.
-static func wanted_chunks(p_focus: Vector3, map_size: float, current: Dictionary = {}) -> Dictionary:
+## `current` é o que já está carregado ({Vector2i: nível}), pra histerese. Nada além de
+## `max_dist` (distância de visão) é carregado.
+static func wanted_chunks(p_focus: Vector3, map_size: float, current: Dictionary = {},
+		max_dist: float = MAX_VIEW_DIST) -> Dictionary:
 	var out := {}
 	var count := ceili(map_size / CHUNK)
-	var reach: float = LOD_DIST[LOD_DIST.size() - 1] + LOD_HYSTERESIS
+	var reach: float = minf(max_dist, MAX_VIEW_DIST) + LOD_HYSTERESIS
 	var c0x := clampi(floori((p_focus.x - reach) / CHUNK), 0, count - 1)
 	var c1x := clampi(floori((p_focus.x + reach) / CHUNK), 0, count - 1)
 	var c0z := clampi(floori((p_focus.z - reach) / CHUNK), 0, count - 1)
@@ -68,7 +78,10 @@ static func wanted_chunks(p_focus: Vector3, map_size: float, current: Dictionary
 	for cz in range(c0z, c1z + 1):
 		for cx in range(c0x, c1x + 1):
 			var key := Vector2i(cx, cz)
-			var lod := lod_for(chunk_distance(p_focus, key), int(current.get(key, -1)))
+			var dist := chunk_distance(p_focus, key)
+			if dist > max_dist + (LOD_HYSTERESIS if current.has(key) else 0.0):
+				continue
+			var lod := lod_for(dist, int(current.get(key, -1)))
 			if lod >= 0:
 				out[key] = lod
 	return out
@@ -115,7 +128,7 @@ func update_chunks(budget_ms: float = BUILD_BUDGET_MS) -> int:
 	var current := {}
 	for key in _chunks:
 		current[key] = _chunks[key]["lod"]
-	var wanted := wanted_chunks(focus, terrain.size, current)
+	var wanted := wanted_chunks(focus, terrain.size, current, view_distance)
 	for key in _chunks.keys():
 		if not wanted.has(key):
 			_chunks[key]["node"].queue_free()
@@ -373,7 +386,7 @@ func _build_environment() -> void:
 	env.tonemap_exposure = 0.9
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.55, 0.62, 0.68)
-	env.fog_density = 0.0012
+	env.fog_density = FOG_DENSITY
 	env.fog_sky_affect = 0.3
 	var we := WorldEnvironment.new()
 	we.name = "Environment"
@@ -388,3 +401,18 @@ func _build_environment() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 140.0
 	add_child(sun)
+	_env = env
+	_sun = sun
+
+
+## Distância de visão (configurações). A câmera do cliente acompanha (camera.far).
+func set_view_distance(d: float) -> void:
+	view_distance = clampf(d, CHUNK, MAX_VIEW_DIST)
+	if _env:
+		_env.fog_density = FOG_DENSITY * MAX_VIEW_DIST / view_distance
+	_refresh_t = 0.0
+
+
+func set_shadows(on: bool) -> void:
+	if _sun:
+		_sun.shadow_enabled = on

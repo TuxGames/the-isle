@@ -39,7 +39,13 @@ CONTROLES
                 /grow 1 (vira adulto), /spawn triceratops 1, /tp 200 300,
                 /hp 50, /food 100 100, /kill, /bots
   F1 .......... esconde/mostra a ajuda
-  Esc ......... menu (sair do servidor / fechar o jogo)
+  Esc ......... menu (configurações / sair do servidor / fechar o jogo)
+
+CONFIGURAÇÕES (no menu inicial ou no Esc)
+  Vídeo: tela cheia, VSync, limite de FPS, distância de visão, sombras, campo de visão.
+  PC fraco? Ponha a distância de visão em "Perto" e desligue as sombras.
+  Controles: sensibilidade do mouse e inverter a vertical.
+  Conta: trocar a senha (precisa estar num servidor).
 
 REGRAS DO MUNDO
   - Se ninguém estiver online, o mundo inteiro fica parado.
