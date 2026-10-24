@@ -7,6 +7,8 @@ extends RefCounted
 const SAVE_FORMAT := 1
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
+## Faixas da simulação por distância (ver _update_sim_tiers).
+enum SimTier { FULL, REDUCED, FROZEN }
 
 const BUSH_MAX_KG := 120.0
 const BUSH_REGROW_S := 300.0
@@ -39,6 +41,7 @@ var pending_attacks: Array = []
 var events: Array = []
 
 var _grid := {}
+var _step_index := 0
 
 
 func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET) -> void:
@@ -80,13 +83,29 @@ func bot_count() -> int:
 	return n
 
 
+## Dino no mundo, ou null. Bot congelado conta como fora: ninguém persegue, foge ou revida
+## contra ele (e ele também não está no _grid, então não é visto nem mordido).
 func get_dino(id: int) -> Dino:
-	return dinos.get(id)
+	var d: Dino = dinos.get(id)
+	if d != null and d.sim_tier == SimTier.FROZEN:
+		return null
+	return d
+
+
+## Quantos bots em cada faixa da simulação por distância: {"full", "reduced", "frozen"}.
+func sim_tier_counts() -> Dictionary:
+	var out := {"full": 0, "reduced": 0, "frozen": 0}
+	for d: Dino in dinos.values():
+		if d.is_bot:
+			out[["full", "reduced", "frozen"][d.sim_tier]] += 1
+	return out
 
 
 func _rebuild_grid() -> void:
 	_grid.clear()
 	for d: Dino in dinos.values():
+		if d.sim_tier == SimTier.FROZEN:
+			continue
 		var key := Vector2i(floori(d.pos.x / GRID_CELL), floori(d.pos.z / GRID_CELL))
 		if not _grid.has(key):
 			_grid[key] = []
@@ -197,20 +216,25 @@ func nearest_carcass(from: Vector3, max_dist: float) -> Dictionary:
 
 func step(dt: float) -> void:
 	world_time += dt
+	_step_index += 1
+	_update_sim_tiers(dt)
 	_rebuild_grid()
 
 	for d: Dino in dinos.values():
-		if d.is_bot:
-			BotBrain.update(self, d, dt)
+		if d.is_bot and _runs_now(d):
+			BotBrain.update(self, d, d.sim_dt)
 
 	_separate_bots()
 
 	for d: Dino in dinos.values():
-		Metabolism.step(d, dt)
+		if not _runs_now(d):
+			continue
+		Metabolism.step(d, d.sim_dt)
 		if d.interacting:
-			_interact(d, dt)
+			_interact(d, d.sim_dt)
 		else:
 			d.interact_result = 0
+		d.sim_dt = 0.0
 
 	_resolve_attacks(dt)
 
@@ -225,6 +249,48 @@ func step(dt: float) -> void:
 	_update_carcasses(dt)
 	_regrow_bushes(dt)
 	_process_respawns()
+
+
+## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
+## perto roda todo passo; mais longe roda 1 passo a cada SIM_REDUCED_EVERY; bem longe congela
+## (ferido continua ferido, briga para no meio). Congelado só acorda mais perto do que
+## congelou (histerese). Sem jogador no mundo ninguém congela: isso só acontece em teste,
+## porque o servidor nem roda o passo com o mundo vazio.
+func _update_sim_tiers(dt: float) -> void:
+	var ps := players()
+	for d: Dino in dinos.values():
+		var near := 0.0
+		if d.is_bot and not ps.is_empty():
+			near = INF
+			for p: Dino in ps:
+				near = minf(near, Movement.flat_distance(d.pos, p.pos))
+		var was_frozen := d.sim_tier == SimTier.FROZEN
+		if near > (GameConfig.SIM_WAKE_DIST if was_frozen else GameConfig.SIM_FREEZE_DIST):
+			if not was_frozen:
+				_freeze(d)
+			continue
+		d.sim_tier = SimTier.FULL if near <= GameConfig.SIM_FULL_DIST else SimTier.REDUCED
+		d.sim_dt += dt
+
+
+func _freeze(d: Dino) -> void:
+	d.sim_tier = SimTier.FROZEN
+	d.sim_dt = 0.0
+	# Fica parado no lugar: o cliente não pode mostrar ele correndo ou comendo sem sair do lugar.
+	d.moving_speed = 0.0
+	d.sprinting = false
+	d.interacting = false
+	d.interact_result = 0
+
+
+## Se o dino é simulado neste passo. Na faixa do meio, o id espalha os bots entre os passos.
+func _runs_now(d: Dino) -> bool:
+	match d.sim_tier:
+		SimTier.FULL:
+			return true
+		SimTier.REDUCED:
+			return (_step_index + d.id) % GameConfig.SIM_REDUCED_EVERY == 0
+	return false
 
 
 func _interact(d: Dino, dt: float) -> void:
@@ -254,7 +320,7 @@ func _interact(d: Dino, dt: float) -> void:
 
 func _separate_bots() -> void:
 	for b: Dino in dinos.values():
-		if not b.is_bot:
+		if not b.is_bot or not _runs_now(b):
 			continue
 		var rb := Species.footprint_radius(b.species, b.growth)
 		for o: Dino in query(b.pos, rb + 6.0):
@@ -297,11 +363,15 @@ func start_attack(d: Dino) -> bool:
 func _resolve_attacks(dt: float) -> void:
 	var still := []
 	for pa in pending_attacks:
+		var attacker: Dino = dinos.get(pa["id"])
+		# Atacante congelado: o golpe fica parado no meio, junto com ele.
+		if attacker != null and attacker.sim_tier == SimTier.FROZEN:
+			still.append(pa)
+			continue
 		pa["t"] -= dt
 		if pa["t"] > 0.0:
 			still.append(pa)
 			continue
-		var attacker: Dino = dinos.get(pa["id"])
 		if attacker == null or not attacker.alive:
 			continue
 		var candidates := query(attacker.pos, 16.0)

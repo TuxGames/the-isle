@@ -15,7 +15,7 @@ Jogo de sobrevivência com dinossauros pra até 5 amigos, inspirado em The Isle.
 
 ```bash
 tools/check.sh        # todos os scripts compilam?
-tools/test.sh         # compilação + 34 testes de unidade + teste de rede (rode antes de todo commit)
+tools/test.sh         # compilação + testes de unidade + teste de rede (rode antes de todo commit)
 tools/net_test.sh     # só o teste de rede (servidor + clientes reais headless)
 godot --headless --path . -s tests/run_tests.gd -- --only=nome   # filtra testes
 tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.9 -0.2   # print do jogo

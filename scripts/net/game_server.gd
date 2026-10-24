@@ -293,7 +293,9 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				d.last_attacker_id = 0
 				reply = "Morte forçada"
 			"/bots":
-				reply = "Bots: %d (alvo %d)" % [sim.bot_count(), sim.bot_target]
+				var tiers := sim.sim_tier_counts()
+				reply = "Bots: %d (alvo %d) · perto %d · longe %d · congelados %d" % [
+					sim.bot_count(), sim.bot_target, tiers["full"], tiers["reduced"], tiers["frozen"]]
 			"/spawn":
 				var sp_id := parts[1] if parts.size() > 1 else "dryosaurus"
 				if not Species.is_valid(sp_id):

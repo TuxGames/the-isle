@@ -43,7 +43,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Bem mais herbívoros que carnívoros, "mas não muito mais" | ✅ (65% / 35%) |
 | Carnívoros também se atacam entre si | ✅ (carnívoro com fome ataca carnívoro menor; canibalismo só morrendo de fome) |
 | **Hitbox plausível**: só toma dano se a mordida realmente acertar | ✅ |
-| A maioria dos bots fica congelada (longe dos jogadores) | ⬜ v0.2 |
+| A maioria dos bots fica congelada (longe dos jogadores) | 🟡 congelamento pronto (ver seção 5), mas no mapa de 512 m quase nada fica longe o bastante. Vale de verdade com o mapa maior |
 | **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 |
 | Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ⬜ |
 | Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ⬜ |
@@ -60,9 +60,9 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Decisão | Status |
 |---|---|
 | Mapa grande, mas só carrega a área num raio grande em volta de cada jogador | ⬜ (o mapa da v0.1 é pequeno e carrega inteiro) |
-| Simulação por faixas de distância (exemplo do Marcelo: >15 células estático; ~10 começa a ativar; ≤5 normal) | ⬜ v0.2 |
-| Bot longe congelado: ferido continua ferido, luta congela | ⬜ v0.2 |
-| A distância considera o jogador mais próximo, não só o host | ⬜ v0.2 |
+| Simulação por faixas de distância (exemplo do Marcelo: >15 células estático; ~10 começa a ativar; ≤5 normal) | ✅ com células de 32 m: até 160 m roda normal (20 Hz); mais longe roda a 10 Hz; congela acima de 480 m e só acorda a 320 m (histerese). Metros escolhidos pelo Tux, falta o Marcelo confirmar |
+| Bot longe congelado: ferido continua ferido, luta congela | ✅ e enquanto congelado ninguém enxerga, persegue ou morde ele |
+| A distância considera o jogador mais próximo, não só o host | ✅ |
 
 ## 6. Ferimentos e cura
 
@@ -167,6 +167,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 - Proteção contra sair do jogo no meio da luta (sugestão do ChatGPT, não decidida).
 - Neve acumulada derrete aos poucos depois da nevasca? (a pergunta ficou sem resposta)
 - Tamanho do mapa final.
+- Tamanho da "célula" do exemplo das distâncias. Usamos 32 m (160 / 320 / 480 m). Está bom?
 - Equilíbrio: na v0.1 um triceratops adulto mata um carnotauro adulto parado com 6 chifradas
   na cabeça. Está bom assim?
 - Ciclo de dia e noite (não foi discutido).

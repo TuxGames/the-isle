@@ -13,10 +13,11 @@
 - Chat e comandos de dev (`/grow`, `/tp`, `/hp`, `/food`, `/kill`, `/spawn`, `/bots`)
 - 34 testes de unidade + teste de rede com servidor e clientes reais
 
-## v0.2: população e distância (próximo)
+## v0.2: população e distância (em andamento)
 
-1. **Congelar bots longe dos jogadores** (faixas de distância do Marcelo, contando o jogador
-   mais próximo; histerese pra não ficar liga/desliga na borda).
+1. ✅ **Congelar bots longe dos jogadores** (faixas de distância do Marcelo, contando o jogador
+   mais próximo; histerese pra não ficar liga/desliga na borda). No mapa de 512 m quase não
+   congela nada: o ganho aparece com o mapa maior (etapa 3). `/bots` mostra as faixas.
 2. **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
    separados; carnívoros com fome → mais herbívoros na área.
 3. Subir o padrão pra ~70 bots e aumentar o mapa (precisa da etapa 1).

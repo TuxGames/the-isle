@@ -39,7 +39,11 @@ headless e rápido (`tests/run_tests.gd`).
   - snapshot de todas as entidades pra cada jogador (15 Hz)
   - status do próprio dino pra cada jogador (10 Hz)
   - save em disco a cada 30 s (e em toda saída/morte)
-- `WorldSim.step`: IA dos bots → separação dos corpos → metabolismo → comer/beber →
+- Simulação por distância (`WorldSim._update_sim_tiers`, valores em `config.gd`): cada bot
+  roda todo passo, passo sim passo não (com o tempo somado) ou fica congelado, conforme o
+  jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
+  pros outros bichos ele não existe.
+- `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
   golpes pendentes → mortes → carcaças → arbustos → reposição de bots.
 
 ## Protocolo (scripts/net/net.gd)

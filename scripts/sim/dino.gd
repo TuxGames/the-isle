@@ -38,6 +38,11 @@ var last_client_time: float = 0.0
 ## Memória da IA (só bots). Ver bot_brain.gd.
 var brain := {}
 
+## Simulação por distância (WorldSim.SimTier; não vai pro save, é recalculada todo passo).
+var sim_tier: int = 0
+## Tempo de mundo acumulado desde a última vez que o dino foi simulado.
+var sim_dt: float = 0.0
+
 
 static func create(p_id: int, p_species: String, p_growth: float, p_pos: Vector3) -> Dino:
 	var d := Dino.new()
