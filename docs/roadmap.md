@@ -34,6 +34,8 @@ Extras (pedidos do Tux):
   na tela) e Conta (trocar senha, esquecer a senha lembrada). Fica no PC do jogador.
 - ✅ Códigos de resgate (R) com painel de admin (Tux e Marcelo): boost de crescimento, acesso
   beta e liberar espécie. Sem level e sem virar adulto na hora (design, seção 12).
+- ✅ Aviso de versão nova: o menu confere a última Release no GitHub e mostra "Baixar"; o erro
+  de "versão diferente" também leva pra página de downloads.
 
 ## v0.3: ferimentos e rastro
 

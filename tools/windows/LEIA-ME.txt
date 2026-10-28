@@ -56,6 +56,10 @@ CÓDIGOS DE RESGATE
   código (recompensa, quantas pessoas podem usar, por quantos dias vale), copiar e
   cancelar. Pra trocar os admins, ponha --admins=Nome1,Nome2 no iniciar_servidor.bat.
 
+VERSÃO NOVA
+  Quando sair versão nova, o menu do jogo avisa e o botão "Baixar" abre a página.
+  Servidor e jogadores precisam estar na mesma versão.
+
 REGRAS DO MUNDO
   - Se ninguém estiver online, o mundo inteiro fica parado.
   - Quando você sai, seu dino some e fica congelado até você voltar.

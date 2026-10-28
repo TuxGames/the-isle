@@ -11,6 +11,7 @@ extends Node3D
 ##   --solo                                                   abre servidor local e entra
 ##   --screenshot=arquivo.png --screenshot-after=8            tira print (testes)
 ##   --open-settings=Vídeo|Controles|Interface|Conta          abre as configurações (prints)
+##   --fake-latest=v9.9.9                                     finge que saiu versão nova (prints)
 
 const MOUSE_SENS := 0.0035
 
@@ -119,6 +120,11 @@ func start(args: Dictionary) -> void:
 				String(args.get("password", "")))
 	if args.has("open-settings"):
 		hud.open_settings(String(args["open-settings"]))
+	var updates := UpdateCheck.new()
+	updates.name = "UpdateCheck"
+	add_child(updates)
+	updates.update_available.connect(hud.show_update)
+	updates.start(String(args.get("fake-latest", "")))
 	if args.has("autopilot"):
 		_autopilot()
 	if args.has("screenshot"):
@@ -231,6 +237,8 @@ func _on_login_failed(reason: String) -> void:
 	Net.disconnect_from_server()
 	_clear_world()
 	hud.show_menu(reason)
+	if reason.begins_with("Versão diferente"):
+		hud.show_update("", GameConfig.RELEASES_PAGE)
 
 
 func _leave() -> void:

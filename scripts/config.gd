@@ -7,6 +7,10 @@ extends RefCounted
 const VERSION := "0.2.1"
 
 const DEFAULT_PORT := 7777
+
+## Onde o jogo confere se saiu versão nova (menu inicial) e a página pra baixar.
+const RELEASES_API := "https://api.github.com/repos/TuxGames/the-isle/releases/latest"
+const RELEASES_PAGE := "https://github.com/TuxGames/the-isle/releases/latest"
 const MAX_PLAYERS := 5
 
 ## Semente do mapa v0.1. Servidor e clientes geram o mesmo terreno a partir dela.

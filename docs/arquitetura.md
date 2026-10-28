@@ -99,6 +99,13 @@ O golpe é um segmento vertical saindo da boca/chifre (`attack_point`), descendo
 segmento (com raio) encostar em alguma esfera do alvo, no fim da preparação do golpe
 (`attack_windup`). A parte atingida muda o dano.
 
+## Aviso de versão nova (`scripts/client/update_check.gd`)
+
+No menu inicial o cliente pede `GameConfig.RELEASES_API` (última Release do GitHub) e, se a tag
+for mais nova que `GameConfig.VERSION`, mostra "Versão nova disponível" com o botão "Baixar".
+Qualquer falha (sem internet, GitHub fora) fica quieta. `--fake-latest=vX.Y.Z` finge uma versão
+nova (prints).
+
 ## Configurações do jogador (`user://configuracoes.cfg`)
 
 `scripts/client/settings.gd` guarda e confere as opções; `scripts/ui/settings_panel.gd` é a tela

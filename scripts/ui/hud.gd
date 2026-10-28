@@ -25,6 +25,9 @@ var _remember: CheckBox
 var _addr_edit: LineEdit
 var _species_menu: OptionButton
 var _menu_status: Label
+var _update_row: Control
+var _update_label: Label
+var _update_url := ""
 var _death_species: OptionButton
 var _death_label: Label
 
@@ -135,6 +138,19 @@ func _build_menu() -> void:
 	cfg.text = "Configurações"
 	cfg.pressed.connect(func(): open_settings())
 	box.add_child(cfg)
+	# Aviso de versão nova (UpdateCheck); escondido até ter novidade.
+	var update := HBoxContainer.new()
+	update.visible = false
+	_update_row = update
+	_update_label = _label("", 14, Color(0.6, 0.9, 0.55))
+	_update_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_update_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	update.add_child(_update_label)
+	var download := Button.new()
+	download.text = "Baixar"
+	download.pressed.connect(func(): OS.shell_open(_update_url))
+	update.add_child(download)
+	box.add_child(update)
 	_menu_status = _label("", 14, Color(1.0, 0.75, 0.5))
 	_menu_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_menu_status.custom_minimum_size = Vector2(390, 0)
@@ -325,6 +341,15 @@ func show_menu(status: String) -> void:
 
 func set_menu_status(text: String) -> void:
 	_menu_status.text = text
+
+
+## Mostra no menu o aviso de versão nova com o botão de baixar. Sem `tag`, só aponta a página
+## de downloads (quando o servidor recusou por versão diferente).
+func show_update(tag: String, url: String) -> void:
+	_update_url = url
+	_update_label.text = "Versão nova disponível: %s" % tag if tag != "" \
+			else "Baixe a versão do servidor na página de downloads."
+	_update_row.visible = true
 
 
 func show_game() -> void:
