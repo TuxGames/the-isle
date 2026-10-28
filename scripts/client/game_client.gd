@@ -334,7 +334,7 @@ func _on_welcome(info: Dictionary) -> void:
 	else:
 		hud.add_message("Você nasceu como %s jovem. Coma, beba e cresça." % Species.display_name(my_species))
 	if bool(info.get("dev", false)):
-		hud.add_message("Servidor em modo dev: Enter → /grow 1, /tp x z, /hp 50, /food 100 100, /kill")
+		hud.add_message("Servidor em modo dev: Enter → /grow 1, /tp x z, /hp 50, /food 100 100, /kill, /time inverno, /weather chuva")
 	if not _args.has("screenshot"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	# --cmd="/grow 1;/tp 200 200": comandos de dev automáticos (prints e testes).

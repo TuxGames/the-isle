@@ -15,7 +15,7 @@ uniform float snow_line = 1000.0;
 uniform float snow_fade = 10.0;
 uniform float lowland_h = 12.0;
 uniform float lowland_min = 0.5;
-uniform vec3 snow_color : source_color = vec3(0.86, 0.88, 0.92);
+uniform vec3 snow_color : source_color = vec3(0.8, 0.83, 0.88);
 
 varying float world_y;
 varying float up;
@@ -48,7 +48,7 @@ uniform float snow_line = 1000.0;
 uniform float snow_fade = 10.0;
 uniform float lowland_h = 12.0;
 uniform float lowland_min = 0.5;
-uniform vec3 snow_color : source_color = vec3(0.86, 0.88, 0.92);
+uniform vec3 snow_color : source_color = vec3(0.8, 0.83, 0.88);
 
 void fragment() {
 	vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -68,7 +68,7 @@ shader_type spatial;
 render_mode cull_disabled;
 
 uniform vec4 water_color : source_color = vec4(0.1, 0.26, 0.3, 0.86);
-uniform vec4 ice_color : source_color = vec4(0.8, 0.87, 0.92, 0.97);
+uniform vec4 ice_color : source_color = vec4(0.62, 0.76, 0.86, 0.95);
 uniform sampler2D ice_map : hint_default_black, filter_linear, repeat_disable;
 uniform float ice_step = 8.0;
 uniform float ice_count = 1.0;
