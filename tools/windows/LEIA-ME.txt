@@ -62,3 +62,13 @@ REGRAS DO MUNDO
     Exceção: saiu até 10 s depois de levar uma mordida? O dino fica mais 10 s no mundo,
     parado. Não dá pra fugir de uma briga fechando o jogo.
   - Morreu? Escolhe uma espécie e recomeça jovem.
+
+FERIMENTOS (aparecem em vermelho embaixo do nome da espécie, com o tempo que falta)
+  Sangrando ...... levou um golpe que tirou mais de 15% da vida. Não cura e perde
+                   vida devagar por 3 min. Dá pra morrer sangrando.
+  Osso quebrado .. mordido por um bicho 3x mais pesado (ou mais). Anda mais devagar,
+                   não corre e manca por 10 min.
+  Mordida funda .. golpe muito forte, ou na cabeça/pescoço. A vida cura pela metade
+                   do ritmo por 6 min.
+  Deitar pra descansar (C) sara os ferimentos 2x mais rápido.
+  Saiu do jogo? Os ferimentos ficam congelados junto com o dino.
