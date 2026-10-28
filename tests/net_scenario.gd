@@ -18,6 +18,10 @@ extends Node
 ##   admin_cria  entra como Tux (admin), cria um código de boost com 2 usos e grava em --out.
 ##   resgata     entra como eva (não é admin), resgata o código de --code-file, não consegue
 ##               resgatar de novo nem criar código, e recebe o boost nos próprios status.
+##   rastro      entra como fred (dryosaurus), vai pra (150, 150) com /tp, anda 30 m pro leste e sai.
+##   fareja      entra como gil (carnotaurus), vai pra perto do caminho do fred, anda um pouco,
+##               fareja (F): recebe as pegadas do fred e não as próprias; farejar de novo logo
+##               em seguida dá "em recarga".
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -80,9 +84,13 @@ func _process(delta: float) -> void:
 
 
 func _on_connected() -> void:
-	var species := "carnotaurus" if role == "alice" else "dryosaurus"
+	var species := "carnotaurus" if role in ["alice", "fareja"] else "dryosaurus"
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
-	if role in ["troca_senha", "dani_nova"]:
+	if role == "rastro":
+		pname = "fred"
+	elif role == "fareja":
+		pname = "gil"
+	elif role in ["troca_senha", "dani_nova"]:
 		pname = "dani"
 	elif role == "admin_cria":
 		pname = "Tux"
@@ -114,6 +122,10 @@ func _on_connected() -> void:
 			_admin_cria()
 		"resgata":
 			_resgata()
+		"rastro":
+			_rastro()
+		"fareja":
+			_fareja()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -392,4 +404,74 @@ func _map_check() -> void:
 				and my_pos.z >= ter.play_min and my_pos.z <= ter.play_max
 		_check(inside, "nasceu dentro do mapa (%.0f, %.0f)" % [my_pos.x, my_pos.z])
 		_check(absf(my_pos.y - ter.height_at(my_pos.x, my_pos.z)) < 0.05, "nasceu no chão do mesmo terreno")
+	_finish()
+
+
+## Vai pra (x, z) com /tp e espera o servidor mandar a posição nova.
+func _teleport(x: int, z: int) -> bool:
+	var seq0 := my_seq
+	_dev("/tp %d %d" % [x, z])
+	return await _wait_for(func(): return my_seq > seq0 and Vector2(my_pos.x - x, my_pos.z - z).length() < 1.0, 5.0)
+
+
+## Anda em linha reta, a ~5 m/s, mandando a posição como o jogo manda (c_state a 20 Hz).
+func _walk_line(dir: Vector3, meters: float) -> void:
+	var done := 0.0
+	while done < meters:
+		await get_tree().process_frame
+		var step := minf(5.0 * get_process_delta_time(), meters - done)
+		my_pos += dir * step
+		done += step
+	await _wait(0.3)
+
+
+## Faro (design, seção 10): deixa um rastro de pegadas pro gil farejar.
+func _rastro() -> void:
+	if not await _wait_for(func(): return my_seq > 0, 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _teleport(150, 150):
+		_fail("/tp não chegou")
+		return _finish()
+	await _wait(0.5)
+	await _walk_line(Vector3(1, 0, 0), 30.0)
+	_check(Vector2(my_pos.x - 180.0, my_pos.z - 150.0).length() < 0.5, "andou 30 m (até %.0f, %.0f)" % [my_pos.x, my_pos.z])
+	_finish()
+
+
+func _fareja() -> void:
+	var answers: Array = []
+	Net.scent_received.connect(func(ok, data, cooldown): answers.append([ok, data, cooldown]))
+	if not await _wait_for(func(): return my_seq > 0, 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _teleport(165, 190):
+		_fail("/tp não chegou")
+		return _finish()
+	await _wait(0.5)
+	# Anda 12 m pro sul: deixa pegadas próprias, que o faro não pode mostrar.
+	await _walk_line(Vector3(0, 0, -1), 12.0)
+	Net.c_sniff.rpc_id(1)
+	if not await _wait_for(func(): return answers.size() >= 1, 5.0):
+		_fail("sem resposta do faro")
+		return _finish()
+	_check(bool(answers[0][0]), "farejou")
+	var data: PackedFloat32Array = answers[0][1]
+	var prints := 0
+	var own := 0
+	var dryo := Species.index_of("dryosaurus")
+	for i in range(0, data.size(), ScentTrail.STRIDE):
+		if int(data[i + 4]) != ScentTrail.KIND_PRINT:
+			continue
+		prints += 1
+		if absf(data[i + 1] - 150.0) > 1.0 or int(data[i + 3]) != dryo:
+			own += 1
+	_check(prints >= 8, "recebeu as pegadas do fred (%d)" % prints)
+	_check(own == 0, "nenhuma pegada própria nem de outro lugar (%d)" % own)
+	Net.c_sniff.rpc_id(1)
+	if not await _wait_for(func(): return answers.size() >= 2, 5.0):
+		_fail("sem resposta do segundo faro")
+		return _finish()
+	_check(not bool(answers[1][0]) and float(answers[1][2]) > GameConfig.SNIFF_COOLDOWN_S - 5.0,
+			"logo depois: em recarga (%.0f s)" % float(answers[1][2]))
 	_finish()

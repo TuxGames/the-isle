@@ -298,6 +298,15 @@ func on_staff_create_code(peer_id: int, reward: String, param: String, uses: int
 	_staff_reply(peer_id, code, "Código criado: %s" % code)
 
 
+## Faro: a regra (raio, recarga) fica no WorldSim.sniff; aqui só responde.
+func on_sniff(peer_id: int) -> void:
+	var d := _dino_for_peer(peer_id)
+	if d == null or not d.alive:
+		return
+	var r := sim.sniff(d)
+	Net.s_scent.rpc_id(peer_id, bool(r["ok"]), r["data"], float(r["wait"]))
+
+
 func on_staff_list_codes(peer_id: int) -> void:
 	if _staff_name(peer_id) != "":
 		_staff_reply(peer_id, "", "")

@@ -4,7 +4,7 @@ extends RefCounted
 
 ## Mude sempre que o protocolo de rede ou o formato do save mudar.
 ## Cliente e servidor com versões diferentes não se conectam.
-const VERSION := "0.2.1"
+const VERSION := "0.3.0"
 
 const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 5
@@ -74,6 +74,19 @@ const DIRECTOR_RELOCATE_MIN_DIST := 180.0
 ## mundo, parado e vulnerável (não dá pra fugir de uma briga fechando o jogo). Recomendação
 ## aprovada pelo Marcelo (28/10). 0 desliga.
 const COMBAT_LOGOUT_S := 10.0
+
+## Faro (design, seção 10; números R). Cada dino que anda deixa uma pegada a cada
+## SCENT_SPACING_M metros; elas duram SCENT_MAX_AGE_S de mundo (que para sem ninguém online).
+## Raio do faro por espécie: `smell_radius` em species.gd.
+const SCENT_SPACING_M := 3.0
+const SCENT_MAX_AGE_S := 120.0
+## Limite de pegadas guardadas no servidor (as mais velhas saem antes).
+const SCENT_MAX_PRINTS := 8000
+## Pulo maior que isso num passo é teleporte (spawn, /tp, diretor): não deixa rastro.
+const SCENT_TELEPORT_M := 25.0
+## Quanto tempo o rastro fica na tela e de quanto em quanto tempo dá pra farejar de novo.
+const SNIFF_SHOW_S := 8.0
+const SNIFF_COOLDOWN_S := 30.0
 
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1

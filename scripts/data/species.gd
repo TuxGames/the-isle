@@ -38,6 +38,8 @@ const DATA := {
 		"juvenile_scale": 0.25,
 		"hip_height": 2.0,
 		"perception_m": 60.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 80.0,
 		# IA: foge quando a vida cai abaixo dessa fração.
 		"flee_health": 0.30,
 		# IA: quanto maior, mais encara inimigos mais fortes.
@@ -81,6 +83,8 @@ const DATA := {
 		"juvenile_scale": 0.25,
 		"hip_height": 1.6,
 		"perception_m": 45.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 40.0,
 		"flee_health": 0.20,
 		"courage": 1.6,
 		# Herbívoro que enfrenta o predador em vez de só fugir.
@@ -122,6 +126,8 @@ const DATA := {
 		"juvenile_scale": 0.3,
 		"hip_height": 1.0,
 		"perception_m": 70.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 60.0,
 		# 1.0 = foge sempre que vê um predador perigoso.
 		"flee_health": 1.0,
 		"courage": 0.3,
