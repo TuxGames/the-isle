@@ -35,6 +35,7 @@ var _bars := {}
 var _species_label: Label
 var _clock_label: Label
 var _roster_label: Label
+var _sniff_label: Label
 var _prompt_label: Label
 var _messages: VBoxContainer
 var _flash: ColorRect
@@ -198,6 +199,8 @@ func _build_game() -> void:
 	ibox.add_child(_clock_label)
 	_roster_label = _label("", 14, Color(0.85, 0.9, 0.8))
 	ibox.add_child(_roster_label)
+	_sniff_label = _label("", 14, Color(1.0, 0.86, 0.35))
+	ibox.add_child(_sniff_label)
 
 	# Mensagens (canto superior esquerdo)
 	_messages = VBoxContainer.new()
@@ -219,7 +222,7 @@ func _build_game() -> void:
 	dot.position = Vector2(-4, -22)
 	game.add_child(dot)
 
-	_help = _label("WASD andar · Shift correr · Clique morder · E (segurar) comer/beber · C descansar\nEnter chat/comandos · F1 esconder ajuda · Esc menu", 13, Color(0.9, 0.9, 0.85, 0.85))
+	_help = _label("WASD andar · Shift correr · Clique morder · E (segurar) comer/beber · C descansar\nF faro · Enter chat/comandos · F1 esconder ajuda · Esc menu", 13, Color(0.9, 0.9, 0.85, 0.85))
 	_help.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_help.position = Vector2(-560, -58)
 	_help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -450,6 +453,11 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 func set_roster(names: Array) -> void:
 	names.sort()
 	_roster_label.text = "Online (%d/%d): %s" % [names.size(), GameConfig.MAX_PLAYERS, ", ".join(names)]
+
+
+## Faro (tecla F): pronto ou quantos segundos faltam.
+func set_sniff_status(seconds_left: float) -> void:
+	_sniff_label.text = "Faro (F): pronto" if seconds_left <= 0.0 else "Faro (F): %d s" % ceili(seconds_left)
 
 
 func set_prompt(text: String) -> void:

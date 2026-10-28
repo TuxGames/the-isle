@@ -117,8 +117,16 @@ trocar o valor ali.
 
 | Decisão | Status |
 |---|---|
-| Habilidade de faro ativável por um momento, mostrando pegadas/cheiro | ⬜ |
-| Visual simples (ex.: rastro amarelo), nada de gráfico pesado | ⬜ |
+| Habilidade de faro ativável por um momento, mostrando pegadas/cheiro | ✅ tecla **F** |
+| Visual simples (ex.: rastro amarelo), nada de gráfico pesado | ✅ marcas amarelas no chão; carcaça com carne = mancha laranja |
+| Mostra as pegadas dos outros dinos (bots e jogadores) dos últimos **2 min**, uma a cada **3 m** andados; as mais velhas mais apagadas. As próprias não aparecem (R) | ✅ |
+| O rastro fica **8 s** na tela; recarga de **30 s**, conferida no servidor (R) | ✅ |
+| Alcance por espécie (R): Carnotaurus **80 m**, Dryosaurus **60 m**, Triceratops **40 m** | ✅ `smell_radius` em `species.gd` |
+| As pegadas envelhecem com o tempo do mundo: com o mundo parado (ninguém online) não somem; bot congelado não deixa pegada; teleporte (`/tp`, nascer) não deixa rastro | ✅ |
+| Bots não usam o faro | ✅ |
+
+Números em `config.gd` (seção "Faro") e `smell_radius` em `species.gd`. As pegadas ficam só na
+memória do servidor: reiniciar o servidor apaga o rastro.
 
 ## 11. Clima e estações
 

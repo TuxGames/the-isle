@@ -41,7 +41,9 @@ Extras (pedidos do Tux):
 
 - Ferimentos (R, design seção 6): sangramento, fratura e mordida funda, com penalidades e
   tempos de cura.
-- Habilidade de faro: pegadas/cheiro em amarelo por alguns segundos.
+- ✅ Habilidade de faro (R, design seção 10): tecla F mostra por 8 s, em amarelo, as pegadas
+  dos outros dinos dos últimos 2 min e as carcaças com carne, num raio por espécie (40 a 80 m);
+  recarga de 30 s.
 
 ## v0.4: reprodução
 

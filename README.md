@@ -21,7 +21,7 @@ O que vem depois: [`docs/roadmap.md`](docs/roadmap.md).
    pelo IP dele. O passo a passo, com Tailscale, está no `LEIA-ME.txt` dentro do zip.
 
 Controles: WASD andar · Shift correr · mouse câmera · clique morder · E (segurar)
-comer/beber · C descansar · Enter chat/comandos · Esc menu.
+comer/beber · C descansar · F faro · Enter chat/comandos · Esc menu.
 
 ### Por que Tailscale?
 

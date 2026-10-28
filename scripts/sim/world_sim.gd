@@ -41,6 +41,10 @@ var respawn_queue: Array = []
 var lingering := {}
 ## Onde e qual bot entra, e quais congelados mudam de lugar (design, seção 3).
 var director := PopulationDirector.new()
+## Pegadas pro faro (design, seção 10).
+var scent := ScentTrail.new()
+## Quando cada jogador pode farejar de novo (nome -> world_time).
+var _sniff_ready := {}
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -258,6 +262,7 @@ func step(dt: float) -> void:
 	_process_respawns()
 	director.update(self, dt)
 	_finish_lingering()
+	scent.record(self)
 
 
 ## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
@@ -602,6 +607,26 @@ func request_logout(id: int) -> bool:
 	d.moving_speed = 0.0
 	lingering[id] = world_time + GameConfig.COMBAT_LOGOUT_S
 	return false
+
+
+## Faro (design, seção 10): pegadas dos outros dinos dos últimos SCENT_MAX_AGE_S e carcaças com
+## carne, num raio que depende da espécie (`smell_radius`). Recarga por jogador, contada em tempo
+## de mundo. Devolve {"ok": bool, "wait": segundos até poder de novo, "data": ScentTrail.STRIDE
+## floats por item}.
+func sniff(d: Dino) -> Dictionary:
+	var key := d.player_name if not d.is_bot else "bot:%d" % d.id
+	var ready_at := float(_sniff_ready.get(key, -INF))
+	if world_time < ready_at:
+		return {"ok": false, "wait": ready_at - world_time, "data": PackedFloat32Array()}
+	_sniff_ready[key] = world_time + GameConfig.SNIFF_COOLDOWN_S
+	var radius := float(d.spec().get("smell_radius", 50.0))
+	var data := scent.query(d.pos, radius, world_time, GameConfig.SCENT_MAX_AGE_S, d.id)
+	for c in carcasses.values():
+		var p: Vector3 = c["pos"]
+		if float(c["meat"]) > 0.5 and Movement.flat_distance(d.pos, p) <= radius:
+			data.append_array(PackedFloat32Array([p.x, p.z, world_time - float(c["t"]),
+					Species.index_of(c["species"]), ScentTrail.KIND_CARCASS]))
+	return {"ok": true, "wait": GameConfig.SNIFF_COOLDOWN_S, "data": data}
 
 
 func _finish_lingering() -> void:
