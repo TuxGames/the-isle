@@ -193,7 +193,6 @@ Ideia do Tux (24/10). As recompensas são recomendação aprovada pelo Marcelo (
 
 ## Em aberto (perguntar ao Marcelo)
 
-
-Em 28/10/2026 o Marcelo mandou seguir as recomendações do Claude em tudo que estava aqui. Elas
+Nada pendente. Em 28/10/2026 o Marcelo mandou seguir as recomendações do Claude em tudo que estava aqui. Elas
 viraram decisões (R) nas seções acima. O questionário (página privada do Tux no claude.ai:
 https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7) continua lá caso ele queira mudar alguma.
