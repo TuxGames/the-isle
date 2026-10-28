@@ -151,7 +151,7 @@ static func think(world: WorldSim, b: Dino) -> void:
 
 	if b.thirst < THIRST_START:
 		_set_state(world, b, "drink")
-		br["dest"] = world.terrain.nearest_water_point(b.pos)
+		br["dest"] = world.nearest_water_point(b.pos)
 		return
 
 	var hunger_start := HUNGER_START_CARN if b.is_carnivore() else HUNGER_START_HERB
@@ -163,7 +163,9 @@ static func think(world: WorldSim, b: Dino) -> void:
 				br["food"] = int(carcass["id"])
 				br["dest"] = carcass["pos"]
 				return
-			if now >= float(br.get("hunt_cooldown_until", 0.0)) and b.stamina > 25.0:
+			# No inverno o instinto de caça é menor: só caça com mais fome (Climate).
+			if now >= float(br.get("hunt_cooldown_until", 0.0)) and b.stamina > 25.0 \
+					and b.hunger < world.hunt_hunger_start(HUNGER_START_CARN):
 				var prey := _choose_prey(b, seen)
 				if prey != null:
 					_set_state(world, b, "hunt", prey.id)
@@ -240,11 +242,18 @@ static func _act(world: WorldSim, b: Dino, dt: float) -> void:
 				_stop(b)
 				b.interacting = true
 			else:
-				var dest: Vector3 = br.get("dest", world.terrain.nearest_water_point(b.pos))
+				if not br.has("dest"):
+					br["dest"] = world.nearest_water_point(b.pos)
+				var dest: Vector3 = br["dest"]
 				if _steer(world, b, dest, speeds.x, dt, 0.5):
-					# Chegou no ponto e ainda não alcança a água: anda mais pra dentro do rio.
-					var cx := world.terrain.river_center_x(b.pos.z)
-					br["dest"] = Vector3(lerpf(b.pos.x, cx, 0.5), 0.0, b.pos.z)
+					var open := world.nearest_water_point(b.pos)
+					if Movement.flat_distance(open, b.pos) > 4.0:
+						# A água daqui congelou ou secou (clima): vai pra outro trecho.
+						br["dest"] = open
+					else:
+						# Chegou no ponto e ainda não alcança a água: anda mais pra dentro do rio.
+						var cx := world.terrain.river_center_x(b.pos.z)
+						br["dest"] = Vector3(lerpf(b.pos.x, cx, 0.5), 0.0, b.pos.z)
 		"eat":
 			if (b.is_carnivore() and not world.carcass_in_reach(b).is_empty()) \
 					or (not b.is_carnivore() and world.bush_in_reach(b) != -1):
@@ -306,12 +315,12 @@ static func _steer(world: WorldSim, b: Dino, dest: Vector3, speed: float, dt: fl
 	# Desacelera em curva fechada, como um bicho de verdade.
 	var align := cos(wrapf(want_yaw - b.yaw, -PI, PI))
 	var v := speed * clampf(align, 0.25, 1.0)
-	if Movement.is_swimming(world.terrain, b.pos.x, b.pos.z, b.body_height()):
+	if Movement.is_swimming(world.terrain, b.pos.x, b.pos.z, b.body_height(), world.water_level):
 		v *= Movement.SWIM_SPEED_MULT
 	v = minf(v, dist / dt)
 	b.pos += b.forward() * v * dt
 	b.pos = world.terrain.clamp_to_play_area(b.pos)
-	b.pos.y = Movement.ground_y(world.terrain, b.pos.x, b.pos.z, b.body_height())
+	b.pos.y = Movement.ground_y(world.terrain, b.pos.x, b.pos.z, b.body_height(), world.water_level)
 	b.moving_speed = v
 	b.sprinting = sprint
 	return false

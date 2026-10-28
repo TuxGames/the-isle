@@ -71,7 +71,7 @@ static func groups(w: WorldSim) -> Array:
 				g["herbs"] += 1
 
 	for g: Dictionary in out:
-		g["wanted"] = w.bot_target * GameConfig.DIRECTOR_NEAR_SHARE / out.size()
+		g["wanted"] = w.effective_bot_target() * GameConfig.DIRECTOR_NEAR_SHARE / out.size()
 		g["deficit"] = g["wanted"] - g["bots"]
 		g["need"] = _need(g)
 	return out
@@ -157,7 +157,7 @@ func _sources(w: WorldSim, target: Dictionary) -> Array:
 		"carn":
 			want_herb = false
 		_:
-			want_herb = target["bots"] == 0 or float(target["herbs"]) / target["bots"] < GameConfig.HERBIVORE_SHARE
+			want_herb = target["bots"] == 0 or float(target["herbs"]) / target["bots"] < w.herbivore_share()
 	var first := []
 	var rest := []
 	for b: Dino in w.bots():
