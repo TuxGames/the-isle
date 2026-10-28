@@ -80,7 +80,8 @@ func _on_snapshot(data: PackedFloat32Array) -> void:
 
 
 func _process(delta: float) -> void:
-	if my_id == 0 or my_seq == 0:
+	# Sem peer: o papel já chamou _finish() e o quit() só vale no fim do quadro.
+	if my_id == 0 or my_seq == 0 or multiplayer.multiplayer_peer == null:
 		return
 	_send_accum += delta
 	if _send_accum >= 1.0 / GameConfig.CLIENT_SEND_HZ:
