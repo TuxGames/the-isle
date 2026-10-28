@@ -39,8 +39,11 @@ Extras (pedidos do Tux):
 
 ## v0.3: ferimentos e rastro
 
-- Ferimentos (R, design seção 6): sangramento, fratura e mordida funda, com penalidades e
-  tempos de cura.
+- ✅ Ferimentos (R, design seção 6): **sangramento** (golpe de mais de 15% da vida: não cura e
+  perde vida por 3 min), **fratura** (golpe de um bicho 3x mais pesado: 60% da velocidade, sem
+  correr e mancando por 10 min) e **mordida funda** (cura pela metade por 6 min). Descansar sara
+  2x mais rápido. Valem pra bots e jogadores, vão pro save (formato 4) e congelam com quem sai.
+  HUD mostra cada um com o tempo que falta; `/hurt` (dev) abre ou cura.
 - ✅ Habilidade de faro (R, design seção 10): tecla F mostra por 8 s, em amarelo, as pegadas
   dos outros dinos dos últimos 2 min e as carcaças com carne, num raio por espécie (40 a 80 m);
   recarga de 30 s.

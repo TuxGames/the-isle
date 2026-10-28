@@ -33,6 +33,8 @@ var _death_label: Label
 
 var _bars := {}
 var _species_label: Label
+## Ferimentos com o tempo que falta ("Sangrando 2:10 · Osso quebrado 8:40"); some sem ferimento.
+var _injury_label: Label
 var _clock_label: Label
 var _roster_label: Label
 var _sniff_label: Label
@@ -182,6 +184,10 @@ func _build_game() -> void:
 	stats.add_child(sbox)
 	_species_label = _label("", 17, ACCENT)
 	sbox.add_child(_species_label)
+	_injury_label = _label("", 14, Color(1.0, 0.45, 0.4))
+	_injury_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_injury_label.visible = false
+	sbox.add_child(_injury_label)
 	for key in [["health", "Vida", Color(0.8, 0.2, 0.18)], ["hunger", "Comida", Color(0.85, 0.55, 0.2)],
 			["thirst", "Água", Color(0.25, 0.55, 0.9)], ["stamina", "Fôlego", Color(0.9, 0.85, 0.3)],
 			["growth", "Crescimento", Color(0.45, 0.75, 0.35)]]:
@@ -446,6 +452,9 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 	if st.size() > Net.ST_GROWTH_BOOST and st[Net.ST_GROWTH_BOOST] > 0.0 and g < 1.0:
 		rest += "  · boost %d min" % ceili(st[Net.ST_GROWTH_BOOST] / 60.0)
 	_species_label.text = "%s — %s%s" % [Species.display_name(species_id), phase, rest]
+	_injury_label.text = Injuries.describe({Injuries.BLEED: st[Net.ST_BLEED],
+			Injuries.FRACTURE: st[Net.ST_FRACTURE], Injuries.DEEP: st[Net.ST_DEEP]})
+	_injury_label.visible = _injury_label.text != ""
 	var wt: float = st[Net.ST_WORLD_TIME]
 	_clock_label.text = "Tempo do mundo: %dh %02dmin" % [int(wt / 3600.0), int(fmod(wt, 3600.0) / 60.0)]
 

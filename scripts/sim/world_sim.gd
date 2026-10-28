@@ -6,7 +6,8 @@ extends RefCounted
 
 ## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
 ## 3: os dinos têm growth_boost_s (save antigo sem o campo vale 0).
-const SAVE_FORMAT := 3
+## 4: os dinos têm "injuries" (save antigo = sem ferimentos).
+const SAVE_FORMAT := 4
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -252,6 +253,8 @@ func step(dt: float) -> void:
 	for d: Dino in dinos.values().duplicate():
 		if d.alive and d.health <= 0.0:
 			var cause := "fome e sede" if (d.hunger <= 0.0 or d.thirst <= 0.0) else "ferimentos"
+			if Injuries.has(d, Injuries.BLEED):
+				cause = "sangramento"
 			var killer: Dino = dinos.get(d.last_attacker_id)
 			if killer != null and world_time - d.last_attacked_time < 10.0:
 				cause = "morto por " + (killer.player_name if not killer.is_bot else Species.display_name(killer.species))
@@ -396,6 +399,7 @@ func _resolve_attacks(dt: float) -> void:
 		var part: String = hit["part"]
 		var dmg := Combat.damage(attacker, part)
 		apply_damage(target, dmg, attacker)
+		Injuries.from_hit(target, attacker, dmg, part)
 		events.append({"type": Ev.HIT, "a": attacker.id, "b": target.id, "value": dmg, "part": part})
 	pending_attacks = still
 
@@ -744,6 +748,7 @@ func save_mismatch(data: Dictionary) -> String:
 ## Carrega um save. Jogadores ficam só nos registros (entram de novo quando conectam).
 ## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 ## Formato 2 lê igual: os dinos só não tinham "growth_boost_s" (Dino.from_dict usa 0).
+## Formato 3 lê igual: os dinos só não tinham "injuries" (Dino.from_dict deixa sem ferimentos).
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))

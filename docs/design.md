@@ -75,10 +75,21 @@ trocar o valor ali.
 
 | Decisão | Status |
 |---|---|
-| Recuperação diferente por espécie e por tipo/grau de ferimento | ⬜ |
-| Exemplo: animal pequeno mordido por um muito grande pode quebrar osso → demora mais | ⬜ |
-| Cura acelerada: ~10 min dependendo do ferimento, nada de horas | 🟡 (v0.1: cura genérica de vida, cheia em 8 min, 4 min descansando) |
-| (R) Lista de ferimentos (detalhes e números ajustados ao implementar): **sangramento** (golpe que tira mais de 15% da vida: perde vida devagar por ~3 min), **fratura** (mordida de um bicho pelo menos 3x mais pesado: anda mais devagar e não corre por ~10 min) e **mordida funda** (cura pela metade por ~6 min). Descansar sara mais rápido | ⬜ v0.3 |
+| Recuperação diferente por espécie e por tipo/grau de ferimento | 🟡 (v0.3: cada tipo tem seu tempo; ritmo por espécie em `injury_heal` no species.gd, hoje 1,0 em todas até jogar) |
+| Exemplo: animal pequeno mordido por um muito grande pode quebrar osso → demora mais | ✅ (fratura, v0.3) |
+| Cura acelerada: ~10 min dependendo do ferimento, nada de horas | ✅ (vida cheia em 8 min, 4 min descansando; ferimentos saram em 3 a 10 min, metade descansando) |
+| (R) Lista de ferimentos: **sangramento**, **fratura** e **mordida funda**; descansar sara mais rápido. Vale pra jogadores e bots, fica no save e congela com quem sai do jogo. Números finais abaixo | ✅ v0.3 |
+
+Ferimentos da v0.3 (números em `scripts/config.gd`, seção "Ferimentos"):
+
+| Ferimento | Quando abre | O que faz | Dura |
+|---|---|---|---|
+| Sangramento | golpe que tira mais de 15% da vida máxima | não cura e perde 5% da vida máxima por minuto (15% no total); quem morre assim morre de "sangramento" | 3 min |
+| Osso quebrado (fratura) | golpe de um bicho com pelo menos 3x a massa (ex.: carnotauro adulto no dryosaurus, tricerátops adulto no carnotauro) | anda a 60% da velocidade, não corre e manca | 10 min |
+| Mordida funda | golpe que tira mais de 25% da vida máxima, ou mais de 10% na cabeça ou no pescoço | a vida cura pela metade do ritmo | 6 min |
+
+Descansando parado, os ferimentos saram 2x mais rápido. Golpe novo renova o ferimento (nunca encurta).
+No HUD: "Sangrando 2:10 · Osso quebrado 8:40".
 
 ## 7. Fome, sede e metabolismo
 
@@ -198,6 +209,7 @@ Ideia do Tux (24/10). As recompensas são recomendação aprovada pelo Marcelo (
 - Fome ou sede zerada: para de curar, o fôlego recupera pela metade e a vida cai devagar
   (~17 min de vida cheia até morrer).
 - Cura (bem alimentado): vida cheia em ~8 min; descansando, ~4 min.
+- Ferimentos: ver a tabela da seção 6 (sangramento 3 min, fratura 10 min, mordida funda 6 min).
 
 ## Em aberto (perguntar ao Marcelo)
 

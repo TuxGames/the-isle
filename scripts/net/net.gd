@@ -40,7 +40,11 @@ const ST_RESTING := 9
 const ST_WORLD_TIME := 10
 ## Segundos de boost de crescimento que ainda faltam (código de resgate).
 const ST_GROWTH_BOOST := 11
-const ST_COUNT := 12
+## Ferimentos (Injuries): segundos que faltam pra sarar cada um (0 = não tem).
+const ST_BLEED := 12
+const ST_FRACTURE := 13
+const ST_DEEP := 14
+const ST_COUNT := 15
 
 signal welcome_received(info: Dictionary)
 signal login_failed(reason: String)

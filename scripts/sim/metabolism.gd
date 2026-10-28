@@ -28,7 +28,7 @@ static func activity(d: Dino) -> float:
 	var moving := d.moving_speed > MOVING_EPS
 	if d.resting and not moving:
 		return ACTIVITY_REST
-	if moving and d.sprinting:
+	if moving and d.sprinting and Injuries.can_sprint(d):
 		return ACTIVITY_SPRINT
 	if moving:
 		return ACTIVITY_WALK
@@ -68,7 +68,7 @@ static func step(d: Dino, dt: float) -> void:
 	# Fôlego
 	var sprint_s: float = sp["stamina_sprint_s"]
 	var regen_s: float = sp["stamina_regen_s"]
-	if d.sprinting and d.moving_speed > MOVING_EPS:
+	if d.sprinting and d.moving_speed > MOVING_EPS and Injuries.can_sprint(d):
 		d.stamina = maxf(0.0, d.stamina - 100.0 / sprint_s * dt)
 	else:
 		var regen := 100.0 / regen_s
@@ -83,10 +83,12 @@ static func step(d: Dino, dt: float) -> void:
 	if starving_count > 0:
 		d.health -= max_hp / (STARVE_MINUTES * 60.0) * starving_count * dt
 	elif d.hunger > WELL_FED and d.thirst > WELL_FED and d.health < max_hp:
-		var heal := max_hp / (HEAL_MINUTES * 60.0)
+		var heal := max_hp / (HEAL_MINUTES * 60.0) * Injuries.heal_mult(d)
 		if d.resting and d.moving_speed <= MOVING_EPS:
 			heal *= 2.0
 		d.health = minf(max_hp, d.health + heal * dt)
+	# Ferimentos: sangramento tira vida; os tempos só andam aqui (dino ativo no mundo).
+	Injuries.step(d, dt)
 
 	# Crescimento (mantém a proporção de vida quando a vida máxima aumenta)
 	if d.growth < 1.0 and d.hunger > GROW_MIN_FOOD and d.thirst > GROW_MIN_FOOD:

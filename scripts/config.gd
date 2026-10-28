@@ -104,6 +104,28 @@ const GROWTH_BOOST_MULT := 1.5
 ## Duração padrão de um código de boost, em minutos (o admin pode escolher outra).
 const GROWTH_BOOST_DEFAULT_MIN := 60
 
+## Ferimentos (design, seção 6; ver sim/injuries.gd). (R) recomendação aprovada pelo Marcelo:
+## ajuste aqui. Tempos em segundos de mundo; só correm com o dino no mundo (quem sai fica
+## congelado com eles). Cada espécie sara no ritmo de "injury_heal" (species.gd).
+## Sangramento: golpe que tira mais que essa fração da vida máxima. Enquanto sangra o bicho não
+## cura e perde BLEED_LOSS_PER_MIN da vida máxima por minuto (3 min = 15% no total).
+const BLEED_MIN_DAMAGE := 0.15
+const BLEED_S := 180.0
+const BLEED_LOSS_PER_MIN := 0.05
+## Fratura: golpe de um bicho pelo menos FRACTURE_MASS_RATIO vezes mais pesado. Anda nessa
+## fração da velocidade e não corre.
+const FRACTURE_MASS_RATIO := 3.0
+const FRACTURE_S := 600.0
+const FRACTURE_SPEED_MULT := 0.6
+## Mordida funda: golpe que tira mais que DEEP_MIN_DAMAGE da vida máxima, ou mais que
+## DEEP_HEAD_DAMAGE na cabeça ou no pescoço. A cura de vida fica multiplicada por DEEP_HEAL_MULT.
+const DEEP_MIN_DAMAGE := 0.25
+const DEEP_HEAD_DAMAGE := 0.10
+const DEEP_S := 360.0
+const DEEP_HEAL_MULT := 0.5
+## Descansando parado, os ferimentos saram tantas vezes mais rápido.
+const INJURY_REST_MULT := 2.0
+
 ## Segundos de mundo até um bot morto ser reposto.
 const BOT_RESPAWN_DELAY_S := 30.0
 ## Segundos de mundo até uma carcaça sumir (se não for comida antes).
