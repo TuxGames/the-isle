@@ -7,7 +7,7 @@ extends RefCounted
 ##   (o tempo do mundo já vai no ST_WORLD_TIME e a semente no login);
 ## - nada vai pro save: tudo sai de novo do world_time salvo;
 ## - com ninguém online o tempo do mundo para, então o clima também para.
-## A única exceção é o /weather dos comandos de dev: fica só na memória do servidor (`override`)
+## A única exceção é o /weather dos comandos de dev: fica só na memória do servidor (`overrides`)
 ## e vai pros clientes por s_event (WorldSim.Ev.WEATHER) e no s_welcome.
 ##
 ## - Calendário: dia de DAY_S (claro + noite) e ano com as 4 estações de SEASON_HOURS.
@@ -38,8 +38,11 @@ const BANK_OFFSET := Terrain.RIVER_HALF_WIDTH + Terrain.BANK_WIDTH + 4.0
 
 var seed_value: int
 var terrain: Terrain
-## /weather (dev): {"weather": int, "from": float, "until": float}; vazio = clima normal.
-var override := {}
+## /weather (dev): trechos de tempo forçado, [{"weather": int, "from": float, "until": float}],
+## em ordem e sem se sobrepor (um novo corta o que vinha depois do começo dele). Vazio = normal.
+var overrides: Array = []
+## Quantos trechos forçados guarda (os mais velhos saem antes).
+const MAX_OVERRIDES := 16
 
 ## Altura das margens do rio a cada BANK_STEP de z, e até que altura de margem o rio nunca congela.
 var _bank_h := PackedFloat32Array()
@@ -196,8 +199,9 @@ func base_weather(t: float) -> int:
 
 ## Tempo agora (com o /weather, se tiver).
 func weather_at(t: float) -> int:
-	if not override.is_empty() and t >= float(override["from"]) and t < float(override["until"]):
-		return int(override["weather"])
+	for o: Dictionary in overrides:
+		if t >= float(o["from"]) and t < float(o["until"]):
+			return int(o["weather"])
 	return base_weather(t)
 
 
@@ -216,14 +220,45 @@ func heavy_rain(t: float) -> bool:
 	return false
 
 
-## /weather (dev): força um tempo de `from` até `until`. weather < 0 volta ao normal.
+## /weather (dev): força um tempo de `from` até `until`; o que estava forçado depois de `from`
+## acaba ali. weather < 0 só corta (volta ao normal a partir de `from`). O cliente recebe os
+## mesmos números e faz a mesma conta, então os dois ficam com a mesma lista.
 func set_override(weather: int, from: float, until: float) -> void:
-	if weather < 0 or until <= from:
-		override = {}
-	else:
-		override = {"weather": weather, "from": from, "until": until}
+	var kept: Array = []
+	for o: Dictionary in overrides:
+		if float(o["from"]) >= from:
+			continue
+		var c := o.duplicate()
+		c["until"] = minf(float(c["until"]), from)
+		kept.append(c)
+	if weather >= 0 and until > from:
+		kept.append({"weather": weather, "from": from, "until": until})
+	while kept.size() > MAX_OVERRIDES:
+		kept.pop_front()
+	_set_overrides(kept)
+
+
+## Lista inteira (s_welcome: o que já estava forçado quando o jogador entrou).
+func set_overrides(list: Array) -> void:
+	var clean: Array = []
+	for o in list:
+		if o is Dictionary and o.has("weather") and o.has("from") and o.has("until"):
+			clean.append({"weather": int(o["weather"]), "from": float(o["from"]), "until": float(o["until"])})
+	_set_overrides(clean)
+
+
+func _set_overrides(list: Array) -> void:
+	overrides = list
 	_override_rev += 1
 	_amount_t = NAN
+
+
+## O trecho forçado que vale agora, ou {}.
+func override_at(t: float) -> Dictionary:
+	for o: Dictionary in overrides:
+		if t >= float(o["from"]) and t < float(o["until"]):
+			return o
+	return {}
 
 
 ## Os próximos `count` blocos a partir de t: [[início, tempo], ...] (pro /weather).
@@ -348,9 +383,10 @@ func snow_cover_at(x: float, z: float, t: float) -> float:
 func _snow_zero_before(at: float) -> float:
 	var z := _natural_zero_before(at)
 	# Neve forçada por /weather (dev) pode ainda estar no chão: soma desde antes dela.
-	if not override.is_empty() and float(override["from"]) < at \
-			and float(override["until"]) + GameConfig.SNOW_MELT_S > z:
-		z = minf(z, _natural_zero_before(float(override["from"])))
+	for i in range(overrides.size() - 1, -1, -1):
+		var o: Dictionary = overrides[i]
+		if float(o["from"]) < at and float(o["until"]) + GameConfig.SNOW_MELT_S > z:
+			z = minf(z, _natural_zero_before(float(o["from"])))
 	return z
 
 
@@ -371,9 +407,9 @@ func _integrate(amount: float, a: float, b: float) -> float:
 	while x < b and guard < 100000:
 		guard += 1
 		var seg_end := minf(b, (floorf(x / block_s) + 1.0) * block_s)
-		if not override.is_empty():
-			var f := float(override["from"])
-			var u := float(override["until"])
+		for o: Dictionary in overrides:
+			var f := float(o["from"])
+			var u := float(o["until"])
 			if f > x and f < seg_end:
 				seg_end = f
 			if u > x and u < seg_end:
@@ -584,7 +620,8 @@ func weather_text(t: float) -> String:
 
 
 ## Destino do /time (só pra frente). Palavras: estação ("inverno"), "seca", hora ("22:00", "6")
-## e "+N" (horas). Devolve {"t": tempo novo} ou {"error": texto}.
+## e "+N" em tempo de MUNDO: "+2" ou "+2h" (horas; 1 h de mundo = 1 dia no relógio), "+30m"
+## (minutos), "+3d" (dias). Devolve {"t": tempo novo} ou {"error": texto}.
 func skip_target(t: float, words: PackedStringArray) -> Dictionary:
 	var target := t
 	for raw in words:
@@ -598,8 +635,8 @@ func skip_target(t: float, words: PackedStringArray) -> Dictionary:
 			if peak < 0.0:
 				return {"error": "Nenhuma seca nos próximos 50 anos com esta semente."}
 			target = peak
-		elif w.begins_with("+") and w.substr(1).is_valid_float() and w.substr(1).to_float() > 0.0:
-			target += w.substr(1).to_float() * 3600.0
+		elif w.begins_with("+") and _parse_span(w.substr(1)) > 0.0:
+			target += _parse_span(w.substr(1))
 		elif _parse_clock(w) >= 0:
 			var tod := fposmod((_parse_clock(w) / 60.0 - GameConfig.CLOCK_SUNRISE_H) / 24.0, 1.0) * GameConfig.DAY_S
 			var at := floorf(target / GameConfig.DAY_S) * GameConfig.DAY_S + tod
@@ -607,8 +644,19 @@ func skip_target(t: float, words: PackedStringArray) -> Dictionary:
 				at += GameConfig.DAY_S
 			target = at
 		else:
-			return {"error": "Uso: /time [primavera|verao|outono|inverno|seca] [hh:mm] [+horas]"}
+			return {"error": "Uso: /time [primavera|verao|outono|inverno|seca] [hh:mm] [+2h|+30m|+3d] (tempo de mundo)"}
 	return {"t": target}
+
+
+## "2", "2h", "30m", "30min", "3d" → segundos de mundo; -1 se não entender.
+static func _parse_span(w: String) -> float:
+	var units := {"min": 60.0, "m": 60.0, "h": 3600.0, "d": GameConfig.DAY_S, "": 3600.0}
+	for suffix in ["min", "m", "h", "d", ""]:
+		if w.ends_with(suffix):
+			var num := w.substr(0, w.length() - suffix.length())
+			if num.is_valid_float() and num.to_float() > 0.0:
+				return num.to_float() * float(units[suffix])
+	return -1.0
 
 
 ## "22:00", "22h", "6" → minutos do relógio (0 a 1439); -1 se não for hora.
@@ -647,12 +695,11 @@ func dev_command(w: WorldSim, words: PackedStringArray) -> String:
 				for f in forecast(t, 6).slice(1):
 					next.append("%s %s" % [clock_text(f[0]), WEATHER_NAMES[f[1]]])
 				return "Tempo: %s%s · depois: %s" % [WEATHER_NAMES[weather_at(t)],
-						" (forçado)" if not override.is_empty() and t < float(override["until"]) else "",
-						", ".join(next)]
+						" (forçado)" if not override_at(t).is_empty() else "", ", ".join(next)]
 			var word := args[0].to_lower()
 			if word == "auto":
-				set_override(-1, 0.0, 0.0)
-				w.events.append({"type": WorldSim.Ev.WEATHER, "weather": -1, "from": 0.0, "until": 0.0})
+				set_override(-1, t, t)
+				w.events.append({"type": WorldSim.Ev.WEATHER, "weather": -1, "from": t, "until": t})
 				return "Tempo volta ao normal: " + weather_text(t)
 			if not WEATHER_WORDS.has(word):
 				return "Uso: /weather limpo|nublado|chuva|tempestade|neve|nevasca [minutos] (ou auto)"

@@ -352,8 +352,8 @@ func _welcome_info(dino: Dino, restored: bool, player_name: String, account_crea
 		"seed": sim.terrain.seed_value,
 		"map_size": sim.terrain.size,
 		"world_time": sim.world_time,
-		# /weather (dev): o clima forçado que o cliente tem que somar no dele (Climate.override).
-		"weather_override": sim.climate.override.duplicate(),
+		# /weather (dev): os trechos de tempo forçado que o cliente soma no clima dele (Climate.overrides).
+		"weather_override": sim.climate.overrides.duplicate(true),
 		"version": GameConfig.VERSION,
 		"dev": dev_mode,
 	}

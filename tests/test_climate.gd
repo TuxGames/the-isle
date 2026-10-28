@@ -416,6 +416,7 @@ func test_clima_chuva_forte_reduz_rebrota(t) -> void:
 	t.near(c.regrow_mult(spring + 10.0), GameConfig.HEAVY_RAIN_REGROW_MULT, 0.0001, "tempestade: rebrota menos")
 	# Chuva logo depois do bloco limpo: o primeiro bloco de chuva ainda não é "longa".
 	var b0 := (floorf(spring / GameConfig.WEATHER_BLOCK_S) + 1.0) * GameConfig.WEATHER_BLOCK_S
+	c.set_overrides([])
 	c.set_override(Climate.Weather.RAIN, b0, b0 + 2.0 * GameConfig.WEATHER_BLOCK_S)
 	t.check(not c.heavy_rain(b0 + 10.0), "chuva curta não é chuva forte")
 	t.check(c.heavy_rain(b0 + GameConfig.WEATHER_BLOCK_S + 10.0), "chuva longa (2 blocos) é")
@@ -596,7 +597,11 @@ func test_clima_comandos_de_dev(t) -> void:
 			"/time 22:00 vai pra próxima 22:00 (%s)" % Climate.clock_text(w.world_time))
 	var t2 := w.world_time
 	c.dev_command(w, PackedStringArray(["/time", "+2"]))
-	t.near(w.world_time - t2, 2.0 * H, 0.001, "/time +2 anda 2 h")
+	t.near(w.world_time - t2, 2.0 * H, 0.001, "/time +2 anda 2 h de mundo")
+	c.dev_command(w, PackedStringArray(["/time", "+30m"]))
+	t.near(w.world_time - t2, 2.5 * H, 0.001, "/time +30m anda 30 min")
+	c.dev_command(w, PackedStringArray(["/time", "+1d"]))
+	t.near(w.world_time - t2, 2.5 * H + GameConfig.DAY_S, 0.001, "/time +1d anda um dia")
 	c.dev_command(w, PackedStringArray(["/time", "seca"]))
 	t.near(c.drought_at(w.world_time), 1.0, 0.0001, "/time seca vai pro pico da próxima seca")
 	var t3 := w.world_time
@@ -605,7 +610,7 @@ func test_clima_comandos_de_dev(t) -> void:
 	w.events.clear()
 	c.dev_command(w, PackedStringArray(["/weather", "nevasca", "30"]))
 	t.check(c.weather_at(w.world_time) == Climate.Weather.BLIZZARD, "/weather nevasca força nevasca")
-	t.near(float(c.override["until"]) - w.world_time, 1800.0, 0.001, "por 30 min")
+	t.near(float(c.override_at(w.world_time)["until"]) - w.world_time, 1800.0, 0.001, "por 30 min")
 	var ev: Dictionary = w.events.back() if not w.events.is_empty() else {}
 	t.check(ev.get("type", 0) == WorldSim.Ev.WEATHER and ev.get("weather", -1) == Climate.Weather.BLIZZARD,
 			"avisa os clientes (evento WEATHER)")
@@ -615,7 +620,19 @@ func test_clima_comandos_de_dev(t) -> void:
 	var later := w.world_time + 900.0
 	t.check(client.snow_amount(later) == c.snow_amount(later) and client.weather_at(later) == c.weather_at(later),
 			"cliente com o mesmo /weather calcula a mesma neve")
+	var t4 := w.world_time + 600.0
+	var snow_before := c.snow_amount(t4)
+	w.world_time = t4
+	c.dev_command(w, PackedStringArray(["/weather", "limpo", "30"]))
+	t.check(c.weather_at(t4) == Climate.Weather.CLEAR, "outro /weather troca o tempo")
+	t.check(c.snow_amount(t4) == snow_before, "e a neve que a nevasca forçada deixou continua")
+	ev = w.events.back()
+	client.set_override(int(ev["weather"]), float(ev["from"]), float(ev["until"]))
+	t.check(client.overrides == c.overrides, "o cliente fica com a mesma lista de tempo forçado")
+	var t5 := t4 + 900.0
+	t.check(client.snow_amount(t5) == c.snow_amount(t5), "e a mesma neve derretendo")
 	c.dev_command(w, PackedStringArray(["/weather", "auto"]))
-	t.check(c.override.is_empty(), "/weather auto volta ao normal")
+	t.check(c.override_at(w.world_time).is_empty(), "/weather auto volta ao normal")
+	t.check(c.snow_amount(w.world_time) > 0.0, "sem apagar a neve que já caiu")
 	var status := c.dev_command(w, PackedStringArray(["/clima"]))
 	t.check(status.contains("[t=") and status.contains("neve="), "/clima mostra o estado (%s)" % status)
