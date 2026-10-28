@@ -4,7 +4,7 @@ extends RefCounted
 
 ## Mude sempre que o protocolo de rede ou o formato do save mudar.
 ## Cliente e servidor com versões diferentes não se conectam.
-const VERSION := "0.2.0"
+const VERSION := "0.2.1"
 
 const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 5
@@ -77,6 +77,15 @@ const COMBAT_LOGOUT_S := 10.0
 
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1
+
+## Códigos de resgate (recomendação aprovada pelo Marcelo, 28/10). Quem cria e revoga códigos,
+## por nome de conta, sem diferença de maiúsculas. O servidor troca com --admins=Nome1,Nome2.
+const DEFAULT_ADMINS := ["Tux", "Marcelo"]
+## Boost de crescimento: cresce esse tanto mais rápido enquanto durar. O tempo só gasta
+## enquanto o dino está crescendo de verdade (online, alimentado e ainda não adulto).
+const GROWTH_BOOST_MULT := 1.5
+## Duração padrão de um código de boost, em minutos (o admin pode escolher outra).
+const GROWTH_BOOST_DEFAULT_MIN := 60
 
 ## Segundos de mundo até um bot morto ser reposto.
 const BOT_RESPAWN_DELAY_S := 30.0

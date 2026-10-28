@@ -65,6 +65,13 @@ Cliente → servidor:
 | `c_password(chave)` | confiável | chave da senha (`Accounts.client_key`), mandada logo antes do `c_login` |
 | `c_login(nome, espécie, versão)` | confiável | espécie só vale se não houver dino vivo salvo. Nunca muda de assinatura: um jogo de outra versão ainda recebe "versão diferente" |
 | `c_set_password(chave atual, chave nova)` | confiável | troca de senha; a resposta vem por `s_password_changed` |
+| `c_redeem_code(código)` | confiável | resgata um código (aba Conta); resposta por `s_redeem_result` |
+| `c_staff_create_code(recompensa, parâmetro, usos, dias)` | confiável | só admin; resposta por `s_staff_codes` |
+| `c_staff_list_codes()`, `c_staff_revoke_code(código)` | confiável | só admin; resposta por `s_staff_codes` |
+
+RPC nova sempre com nome que vem **depois** de `c_login` (e `s_login_failed`) em ordem alfabética,
+declarada no fim da seção: assim o `c_login` não muda de posição e um jogo de outra versão ainda
+recebe "versão diferente".
 | `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
 | `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer, comando dev, chat |
 
@@ -76,11 +83,13 @@ Servidor → cliente:
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando, nadando, andando) |
-| `s_self_stats(PackedFloat32Array)` | vida, vida máx., comida, água, fôlego, crescimento, vel. andar/correr, interação, descansando, tempo do mundo |
+| `s_self_stats(PackedFloat32Array)` | vida, vida máx., comida, água, fôlego, crescimento, vel. andar/correr, interação, descansando, tempo do mundo, segundos de boost de crescimento |
 | `s_roster(dict)` | id → nome dos jogadores online |
 | `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte |
 | `s_died(causa)`, `s_message(texto)` | morte do próprio jogador; mensagens/chat |
 | `s_password_changed(ok, texto)` | resposta da troca de senha (o cliente atualiza a senha lembrada) |
+| `s_redeem_result(ok, texto, perks)` | resposta do resgate, com o que a conta tem agora (`beta`, `species`) |
+| `s_staff_codes(lista, criado, texto)` | resposta das ações de admin: lista de códigos, o código recém-criado e uma mensagem |
 
 ## Hitbox
 
@@ -104,6 +113,19 @@ PBKDF2 da senha, usando o nome como sal; com "Lembrar a senha", guarda só essa 
 `user://cliente.cfg`. Fica fora do `world.json` pra trocar de mapa não apagar as senhas. Se o
 arquivo estiver ilegível, o servidor não sobe (não pode virar "ninguém tem senha").
 
+Formato 2: cada conta tem `perks` (o que ganhou com códigos): `beta`, `species` (liberadas) e
+`codes` (já usados). Arquivo do formato 1 carrega igual, com `perks` vazio.
+
+## Códigos de resgate (`<save>.codigos.json`)
+
+`scripts/net/codes.gd` (`RedeemCodes`): gera (`DINO-XXXX-XXXX` com `Crypto`), confere (existe,
+cancelado, vencido, usos, já usado por essa conta, 5 erros por minuto) e gasta. O que cada código
+dá fica em `scripts/sim/rewards.gd` (`Rewards`): uma entrada em `TYPES` + um caso em `validate`,
+`describe` e `apply` pra criar outra. O `GameServer` junta os três (códigos, contas e mundo),
+confere quem é admin (`--admins`, padrão `GameConfig.DEFAULT_ADMINS`) e grava os arquivos.
+A escolha de espécie (login novo e renascer) passa por `Species.choice_error`: espécie `locked`
+precisa ter sido liberada; `beta` precisa de acesso beta. Arquivo ilegível: o servidor não sobe.
+
 ## Save (`world.json`)
 
 `format`, `version`, `seed`, `map_size`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
@@ -111,6 +133,8 @@ arquivo estiver ilegível, o servidor não sobe (não pode virar "ninguém tem s
 como estão naquele instante; quem está offline fica congelado no registro.
 
 - Formato 2 (v0.2) grava `map_size`; o formato 1 (v0.1) não tinha e é lido como 512 m.
+- Formato 3: os dinos têm `growth_boost_s` (boost de crescimento que falta); antes valia 0.
+  Quem morre leva o boost pro próximo dino (o registro de morto guarda o campo).
 - Tamanho do mapa ao subir o servidor: o de `--map-size`; senão o do save; senão 512 m.
 - Save de outro mapa (semente ou tamanho diferente) não é sobrescrito: o servidor guarda ele
   como `world.outro-mapa-<hora>.json` e começa um mundo novo (`WorldSim.save_mismatch`).

@@ -60,6 +60,8 @@ client bob_return --expect="$TMP/bob.json" || FAILS=$((FAILS+1))
 client bob_die || FAILS=$((FAILS+1))
 client troca_senha || FAILS=$((FAILS+1))   # troca a senha da dani (com a atual errada não troca)
 client dani_nova || FAILS=$((FAILS+1))     # e ela entra com a senha nova
+client admin_cria --out="$TMP/codigo.txt" || FAILS=$((FAILS+1))   # Tux (admin) cria um código
+client resgata --code-file="$TMP/codigo.txt" || FAILS=$((FAILS+1)) # eva resgata uma vez só
 stop_server
 
 # Mapa de outro tamanho, num save à parte:

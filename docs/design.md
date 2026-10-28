@@ -136,6 +136,21 @@ trocar o valor ali.
 | (R) Dia e noite: um dia dura 1 h jogada (40 min claro + 20 min de noite) | ⬜ v0.5 |
 | (R) Neve acumulada derrete aos poucos depois da nevasca | ⬜ v0.5 |
 
+## 12. Códigos de resgate (R)
+
+Ideia do Tux (24/10). As recompensas são recomendação aprovada pelo Marcelo (28/10); tudo fica em
+`scripts/sim/rewards.gd` e `config.gd`, pra mudar fácil.
+
+| Decisão | Status |
+|---|---|
+| Admins (criam e cancelam códigos no jogo): **Tux e Marcelo**, por nome de conta (`DEFAULT_ADMINS`; o servidor troca com `--admins=Nome1,Nome2`) | ✅ aba Admin das configurações, só aparece pra admin; o servidor confere tudo |
+| O jogador resgata na aba **Conta**; cada conta usa um mesmo código uma vez só | ✅ |
+| Código: `DINO-XXXX-XXXX`, sem 0/O/1/I; escolhe quantas pessoas podem usar e por quantos dias vale | ✅ 5 códigos errados num minuto bloqueiam a conta por 1 minuto |
+| **Boost de crescimento**: +50% de velocidade por 60 min (o admin escolhe de 5 a 600 min); só gasta enquanto o dino cresce, não se perde ao sair nem ao morrer | ✅ |
+| **Acesso beta**: libera as espécies marcadas `beta` | ✅ (hoje nenhuma espécie é beta) |
+| **Liberar espécie**: libera uma espécie marcada `locked` | ✅ (hoje nenhuma é trancada) |
+| **Não existe** recompensa de "level" nem de virar adulto na hora: chegar no adulto é a parte difícil (seção 9) e quem morre recomeça jovem | ✅ |
+
 ---
 
 ## Decisões de engenharia (Tux + Claude)
@@ -178,10 +193,6 @@ trocar o valor ali.
 
 ## Em aberto (perguntar ao Marcelo)
 
-- **Códigos de resgate** (ideia do Tux, 24/10): o admin cria códigos no jogo e o jogador resgata na
-  aba Conta. O que um código pode dar (crescimento? espécie? acesso antecipado?) esbarra em
-  "morreu → recomeça jovem", então o Tux vai decidir com o Marcelo. Já decidido: admins são o
-  Tux e o Marcelo.
 
 Em 28/10/2026 o Marcelo mandou seguir as recomendações do Claude em tudo que estava aqui. Elas
 viraram decisões (R) nas seções acima. O questionário (página privada do Tux no claude.ai:

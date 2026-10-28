@@ -19,6 +19,11 @@ var accounts := Accounts.new()
 var accounts_path := ""
 ## Chave da senha que chegou antes do c_login: peer_id -> String.
 var _pending_keys := {}
+## Códigos de resgate, gravados ao lado do save: world.json -> world.codigos.json.
+var codes := RedeemCodes.new()
+var codes_path := ""
+## Quem pode criar e revogar códigos (nomes de conta em minúsculas). --admins=Nome1,Nome2.
+var admins: Array = []
 
 var _sim_accum := 0.0
 var _snap_accum := 0.0
@@ -61,6 +66,12 @@ func start(args: Dictionary) -> Error:
 
 	accounts_path = save_path.get_basename() + ".contas.json"
 	_load_accounts()
+	codes_path = save_path.get_basename() + ".codigos.json"
+	_load_codes()
+	var admin_names: Array = GameConfig.DEFAULT_ADMINS
+	if args.has("admins"):
+		admin_names = Array(String(args["admins"]).split(",", false))
+	admins = admin_names.map(func(n): return String(n).strip_edges().to_lower())
 
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, GameConfig.MAX_PLAYERS + 3)
@@ -176,6 +187,9 @@ func on_login(peer_id: int, player_name: String, species_id: String, version: St
 					player_name, ceili(accounts.lock_seconds_left(player_name, now))]
 			Accounts.Result.BAD_KEY:
 				reason = "Digite uma senha (pelo menos %d letras ou números)." % Accounts.MIN_PASSWORD
+		# Espécie trancada ou em teste: só vale pra quem vai nascer agora (dino salvo volta igual).
+		if reason == "" and not bool(sim.player_records.get(player_name, {}).get("alive", false)):
+			reason = Species.choice_error(species_id, accounts.perks(player_name))
 	if reason != "":
 		Net.s_login_failed.rpc_id(peer_id, reason)
 		_log("login recusado (peer %d, \"%s\"): %s" % [peer_id, player_name, reason])
@@ -231,11 +245,99 @@ func on_change_password(peer_id: int, old_key: String, new_key: String) -> void:
 	Net.s_password_changed.rpc_id(peer_id, result == Accounts.Result.OK, reply)
 
 
+# ---------------------------------------------------------------- códigos de resgate
+
+func is_admin(player_name: String) -> bool:
+	return admins.has(player_name.strip_edges().to_lower())
+
+
+## Jogador resgata um código (aba Conta): confere, entrega a recompensa e gasta um uso.
+func on_redeem_code(peer_id: int, text: String) -> void:
+	if not peers.has(peer_id):
+		return
+	var player_name := String(peers[peer_id]["name"])
+	var now := Time.get_unix_time_from_system()
+	var check := codes.check(text.substr(0, 40), player_name, now)
+	var result: RedeemCodes.Result = check["result"]
+	if result != RedeemCodes.Result.OK:
+		var msg := RedeemCodes.message(result)
+		if result == RedeemCodes.Result.LOCKED:
+			msg = "Muitos códigos errados. Espere %d segundos." % ceili(codes.wait_seconds(player_name, now))
+		_log("[código] %s errou um código: %s" % [player_name, msg])
+		Net.s_redeem_result.rpc_id(peer_id, false, msg, accounts.perks_summary(player_name))
+		return
+	var entry: Dictionary = check["entry"]
+	var invalid := Rewards.validate(entry["reward"], entry["param"])
+	if invalid != "":
+		Net.s_redeem_result.rpc_id(peer_id, false, "Esse código está com defeito: " + invalid,
+				accounts.perks_summary(player_name))
+		return
+	var msg := Rewards.apply(entry["reward"], entry["param"], player_name, sim, accounts.perks(player_name))
+	codes.consume(entry["code"], player_name)
+	accounts.mark_redeemed(player_name, entry["code"])
+	_save_accounts()
+	_save_codes()
+	save()
+	_log("[código] %s resgatou %s (%s)" % [player_name, entry["code"],
+			Rewards.describe(entry["reward"], entry["param"])])
+	Net.s_redeem_result.rpc_id(peer_id, true, msg, accounts.perks_summary(player_name))
+
+
+func on_staff_create_code(peer_id: int, reward: String, param: String, uses: int, days: int) -> void:
+	var player_name := _staff_name(peer_id)
+	if player_name == "":
+		return
+	var invalid := Rewards.validate(reward, param)
+	if invalid != "":
+		_staff_reply(peer_id, "", invalid)
+		return
+	var code := codes.create(reward, param, uses, days, player_name, Time.get_unix_time_from_system())
+	_save_codes()
+	_log("[código] %s criou %s: %s, %d uso(s), validade %d dia(s)" % [
+		player_name, code, Rewards.describe(reward, param), uses, days])
+	_staff_reply(peer_id, code, "Código criado: %s" % code)
+
+
+func on_staff_list_codes(peer_id: int) -> void:
+	if _staff_name(peer_id) != "":
+		_staff_reply(peer_id, "", "")
+
+
+func on_staff_revoke_code(peer_id: int, code: String) -> void:
+	var player_name := _staff_name(peer_id)
+	if player_name == "":
+		return
+	if codes.revoke(code):
+		_save_codes()
+		_log("[código] %s cancelou %s" % [player_name, RedeemCodes.normalize(code)])
+		_staff_reply(peer_id, "", "Código cancelado: %s" % RedeemCodes.normalize(code))
+	else:
+		_staff_reply(peer_id, "", "Esse código não existe ou já estava cancelado.")
+
+
+## Nome do admin logado nesse peer, ou "" (e avisa quem não é admin).
+func _staff_name(peer_id: int) -> String:
+	if not peers.has(peer_id):
+		return ""
+	var player_name := String(peers[peer_id]["name"])
+	if not is_admin(player_name):
+		_log("[código] %s tentou mexer nos códigos sem ser admin" % player_name)
+		Net.s_staff_codes.rpc_id(peer_id, [], "", "Só os admins mexem nos códigos.")
+		return ""
+	return player_name
+
+
+func _staff_reply(peer_id: int, created: String, text: String) -> void:
+	Net.s_staff_codes.rpc_id(peer_id, codes.list_for_admin(), created, text)
+
+
 func _welcome_info(dino: Dino, restored: bool, player_name: String, account_created: bool) -> Dictionary:
 	return {
 		"entity_id": dino.id,
 		"name": player_name,
 		"account_created": account_created,
+		"admin": is_admin(player_name),
+		"perks": accounts.perks_summary(player_name),
 		"species": dino.species,
 		"restored": restored,
 		"seed": sim.terrain.seed_value,
@@ -321,6 +423,10 @@ func on_action(peer_id: int, action: int, arg: String) -> void:
 
 func _respawn(peer_id: int, species_id: String) -> void:
 	var player_name: String = peers[peer_id]["name"]
+	var locked := Species.choice_error(species_id, accounts.perks(player_name))
+	if locked != "":
+		Net.s_message.rpc_id(peer_id, locked)
+		return
 	var d := sim.respawn_player(player_name, species_id)
 	peers[peer_id]["dino_id"] = d.id
 	_log("[login] %s renasceu como %s jovem" % [player_name, Species.display_name(d.species)])
@@ -496,6 +602,7 @@ func _send_self_stats() -> void:
 		st[Net.ST_INTERACT] = d.interact_result
 		st[Net.ST_RESTING] = 1.0 if d.resting else 0.0
 		st[Net.ST_WORLD_TIME] = sim.world_time
+		st[Net.ST_GROWTH_BOOST] = d.growth_boost_s
 		Net.s_self_stats.rpc_id(pid, st)
 
 
@@ -531,6 +638,23 @@ func _write_json(path: String, data: Dictionary) -> void:
 
 func _save_accounts() -> void:
 	_write_json(accounts_path, accounts.to_dict())
+
+
+func _save_codes() -> void:
+	_write_json(codes_path, codes.to_dict())
+
+
+func _load_codes() -> void:
+	if not FileAccess.file_exists(codes_path):
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(codes_path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		# Não sobrescreve: os códigos já entregues pros amigos sumiriam.
+		_log("ERRO: arquivo de códigos ilegível em %s. Conserte ou apague o arquivo e reinicie." % codes_path)
+		get_tree().quit(1)
+		return
+	codes.load_dict(parsed)
+	_log("códigos carregados: %d" % codes.codes.size())
 
 
 func _load_accounts() -> void:

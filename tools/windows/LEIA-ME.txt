@@ -45,7 +45,16 @@ CONFIGURAÇÕES (no menu inicial ou no Esc)
   Vídeo: tela cheia, VSync, limite de FPS, distância de visão, sombras, campo de visão.
   PC fraco? Ponha a distância de visão em "Perto" e desligue as sombras.
   Controles: sensibilidade do mouse e inverter a vertical.
-  Conta: trocar a senha (precisa estar num servidor).
+  Conta: trocar a senha e resgatar códigos (precisa estar num servidor).
+
+CÓDIGOS DE RESGATE
+  Ganhou um código (DINO-XXXX-XXXX)? Entre no servidor, Esc > Configurações > Conta,
+  digite o código e clique em "Resgatar". Pode digitar em minúscula e sem os traços.
+  Um código pode dar boost de crescimento (cresce 50% mais rápido por um tempo; só gasta
+  enquanto você cresce), acesso beta ou liberar uma espécie.
+  Admins (Tux e Marcelo): a aba Admin aparece nas configurações. Lá dá pra criar um
+  código (recompensa, quantas pessoas podem usar, por quantos dias vale), copiar e
+  cancelar. Pra trocar os admins, ponha --admins=Nome1,Nome2 no iniciar_servidor.bat.
 
 REGRAS DO MUNDO
   - Se ninguém estiver online, o mundo inteiro fica parado.

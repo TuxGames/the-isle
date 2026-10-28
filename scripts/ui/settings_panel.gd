@@ -1,15 +1,21 @@
 class_name SettingsPanel
 extends Control
 ## Tela de configurações (abre pelo menu e pelo Esc). Mexe direto no objeto Settings e avisa
-## com `changed`; quem aplica e grava é o GameClient. A aba Conta pede a troca de senha ao
-## servidor, então só funciona com o jogador dentro de um servidor.
+## com `changed`; quem aplica e grava é o GameClient. A aba Conta (senha e códigos) e a aba
+## Admin (só aparece pra admin) falam com o servidor, então só funcionam dentro de um servidor.
 
 signal changed
 signal change_password_requested(old_password: String, new_password: String, repeat: String)
 signal forget_password_requested
+signal redeem_requested(code: String)
+signal create_code_requested(reward: String, param: String, uses: int, days: int)
+signal list_codes_requested
+signal revoke_code_requested(code: String)
 signal closed
 
-const TABS := ["Vídeo", "Controles", "Interface", "Conta"]
+const TABS := ["Vídeo", "Controles", "Interface", "Conta", "Admin"]
+const OK_COLOR := Color(0.6, 0.9, 0.55)
+const WARN_COLOR := Color(1.0, 0.75, 0.5)
 
 var settings: Settings
 
@@ -22,6 +28,22 @@ var _old_pass: LineEdit
 var _new_pass: LineEdit
 var _repeat_pass: LineEdit
 var _pass_status: Label
+var _code_box: Control
+var _code_edit: LineEdit
+var _redeem_status: Label
+var _perks_label: Label
+var _perks := {}
+var _boost_s := 0.0
+var _reward_opt: OptionButton
+var _minutes: SpinBox
+var _minutes_row: Control
+var _species_opt: OptionButton
+var _species_row: Control
+var _uses: SpinBox
+var _days: SpinBox
+var _created_code: LineEdit
+var _staff_status: Label
+var _codes_list: VBoxContainer
 
 
 static func create(p_settings: Settings) -> SettingsPanel:
@@ -47,7 +69,7 @@ func _ready() -> void:
 	sb.set_corner_radius_all(8)
 	sb.set_content_margin_all(16)
 	panel.add_theme_stylebox_override("panel", sb)
-	panel.custom_minimum_size = Vector2(560, 440)
+	panel.custom_minimum_size = Vector2(600, 500)
 	center.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
@@ -57,12 +79,11 @@ func _ready() -> void:
 	_tabs = TabContainer.new()
 	_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_tabs)
-	_tabs.add_child(_video_tab())
-	_tabs.add_child(_controls_tab())
-	_tabs.add_child(_interface_tab())
-	_tabs.add_child(_account_tab())
+	for tab in [_video_tab(), _controls_tab(), _interface_tab(), _account_tab(), _admin_tab()]:
+		_tabs.add_child(_scroll(tab))
 	for i in TABS.size():
 		_tabs.set_tab_title(i, TABS[i])
+	set_admin(false)
 
 	var close := Button.new()
 	close.text = "Fechar"
@@ -76,7 +97,7 @@ func _ready() -> void:
 
 ## Abre na aba pedida (nome de TABS) ou na que estava.
 func open(tab: String = "") -> void:
-	if TABS.has(tab):
+	if TABS.has(tab) and not _tabs.is_tab_hidden(TABS.find(tab)):
 		_tabs.current_tab = TABS.find(tab)
 	visible = true
 
@@ -87,9 +108,54 @@ func set_account(player_name: String) -> void:
 		return
 	var online := player_name != ""
 	_account_label.text = "Conectado como %s." % player_name if online \
-			else "Entre num servidor pra trocar a sua senha."
+			else "Entre num servidor pra trocar a sua senha e resgatar códigos."
 	_account_form.visible = online
+	_code_box.visible = online
 	_pass_status.text = ""
+	_redeem_status.text = ""
+
+
+## A aba Admin só aparece pra quem o servidor diz que é admin.
+func set_admin(on: bool) -> void:
+	var i := TABS.find("Admin")
+	if not on and _tabs.current_tab == i:
+		_tabs.current_tab = TABS.find("Conta")
+	_tabs.set_tab_hidden(i, not on)
+
+
+## O que a conta ganhou com códigos ({"beta": bool, "species": [ids]}).
+func set_perks(perks: Dictionary) -> void:
+	_perks = perks
+	_update_perks()
+
+
+## Segundos de boost de crescimento que faltam (vem com os status do dino).
+func set_boost(seconds: float) -> void:
+	if absf(seconds - _boost_s) >= 1.0 or (seconds <= 0.0) != (_boost_s <= 0.0):
+		_boost_s = seconds
+		_update_perks()
+
+
+func show_redeem_result(ok: bool, text: String, perks: Dictionary) -> void:
+	_redeem_status.text = text
+	_redeem_status.add_theme_color_override("font_color", OK_COLOR if ok else WARN_COLOR)
+	if ok:
+		_code_edit.text = ""
+	set_perks(perks)
+
+
+## Resposta do servidor às ações de admin: lista de códigos, código recém-criado e mensagem.
+func show_staff_codes(list: Array, created: String, text: String) -> void:
+	if created != "":
+		_created_code.text = created
+	if text != "":
+		_staff_status.text = text
+	for child in _codes_list.get_children():
+		child.queue_free()
+	if list.is_empty():
+		_codes_list.add_child(_label("Nenhum código criado ainda.", 14, Color(0.8, 0.8, 0.75)))
+	for e: Dictionary in list:
+		_codes_list.add_child(_code_row(e))
 
 
 func set_password_status(text: String, ok: bool) -> void:
@@ -173,7 +239,149 @@ func _account_tab() -> Control:
 		forget_password_requested.emit()
 		set_password_status("Pronto: este PC não lembra mais a sua senha.", true))
 	b.add_child(forget)
+
+	var codes := VBoxContainer.new()
+	codes.add_theme_constant_override("separation", 6)
+	_code_box = codes
+	b.add_child(codes)
+	codes.add_child(HSeparator.new())
+	codes.add_child(_label("Código de resgate", 16, Hud.ACCENT))
+	var row := HBoxContainer.new()
+	_code_edit = LineEdit.new()
+	_code_edit.placeholder_text = "DINO-XXXX-XXXX"
+	_code_edit.max_length = 20
+	_code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_code_edit.text_submitted.connect(func(t): redeem_requested.emit(t.strip_edges()))
+	row.add_child(_code_edit)
+	var redeem := Button.new()
+	redeem.text = "Resgatar"
+	redeem.pressed.connect(func(): redeem_requested.emit(_code_edit.text.strip_edges()))
+	row.add_child(redeem)
+	codes.add_child(row)
+	_redeem_status = _label("", 14)
+	_redeem_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	codes.add_child(_redeem_status)
+	_perks_label = _label("", 14, Color(0.85, 0.9, 0.8))
+	_perks_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	codes.add_child(_perks_label)
+	_update_perks()
 	return b
+
+
+func _admin_tab() -> Control:
+	var b := _tab_box("Admin")
+	b.add_child(_label("Criar código", 16, Hud.ACCENT))
+	_reward_opt = OptionButton.new()
+	for id in Rewards.ids():
+		_reward_opt.add_item(Rewards.display_name(id))
+	_reward_opt.item_selected.connect(func(_i): _update_reward_param())
+	b.add_child(_row("Recompensa", _reward_opt))
+	_minutes = _spin(Rewards.BOOST_MIN_MINUTES, Rewards.BOOST_MAX_MINUTES, GameConfig.GROWTH_BOOST_DEFAULT_MIN)
+	_minutes_row = _row("Minutos de boost", _minutes)
+	b.add_child(_minutes_row)
+	_species_opt = OptionButton.new()
+	for id in Species.IDS:
+		_species_opt.add_item(Species.display_name(id))
+	_species_row = _row("Espécie", _species_opt)
+	b.add_child(_species_row)
+	_uses = _spin(1, RedeemCodes.MAX_USES, 1)
+	b.add_child(_row("Quantas pessoas podem usar", _uses))
+	_days = _spin(0, RedeemCodes.MAX_DAYS, 0)
+	b.add_child(_row("Vale por quantos dias (0 = sempre)", _days))
+	var create := Button.new()
+	create.text = "Criar código"
+	create.pressed.connect(_on_create_pressed)
+	b.add_child(create)
+	var made := HBoxContainer.new()
+	_created_code = LineEdit.new()
+	_created_code.editable = false
+	_created_code.placeholder_text = "o código criado aparece aqui"
+	_created_code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	made.add_child(_created_code)
+	var copy := Button.new()
+	copy.text = "Copiar"
+	copy.pressed.connect(_on_copy_pressed)
+	made.add_child(copy)
+	b.add_child(made)
+	_staff_status = _label("", 14, OK_COLOR)
+	_staff_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	b.add_child(_staff_status)
+	b.add_child(HSeparator.new())
+	var head := HBoxContainer.new()
+	var title := _label("Códigos", 16, Hud.ACCENT)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var refresh := Button.new()
+	refresh.text = "Atualizar lista"
+	refresh.pressed.connect(func(): list_codes_requested.emit())
+	head.add_child(refresh)
+	b.add_child(head)
+	_codes_list = VBoxContainer.new()
+	_codes_list.add_theme_constant_override("separation", 4)
+	b.add_child(_codes_list)
+	_update_reward_param()
+	return b
+
+
+func _on_create_pressed() -> void:
+	var reward: String = Rewards.ids()[_reward_opt.selected]
+	var param := ""
+	match String(Rewards.TYPES[reward]["param"]):
+		"minutes":
+			param = str(int(_minutes.value))
+		"species":
+			param = Species.IDS[_species_opt.selected]
+	create_code_requested.emit(reward, param, int(_uses.value), int(_days.value))
+
+
+func _on_copy_pressed() -> void:
+	if _created_code.text != "":
+		DisplayServer.clipboard_set(_created_code.text)
+		_staff_status.text = "Copiado: %s" % _created_code.text
+
+
+func _update_reward_param() -> void:
+	var kind := String(Rewards.TYPES[Rewards.ids()[_reward_opt.selected]]["param"])
+	_minutes_row.visible = kind == "minutes"
+	_species_row.visible = kind == "species"
+
+
+func _update_perks() -> void:
+	if _perks_label == null:
+		return
+	var lines: Array = []
+	if _boost_s > 0.0:
+		lines.append("Boost de crescimento: mais %d min (só gasta enquanto você cresce)." % ceili(_boost_s / 60.0))
+	if bool(_perks.get("beta", false)):
+		lines.append("Acesso beta: sim.")
+	var unlocked: Array = Array(_perks.get("species", [])).map(func(id): return Species.display_name(id))
+	if not unlocked.is_empty():
+		lines.append("Espécies liberadas: %s." % ", ".join(unlocked))
+	_perks_label.text = "\n".join(lines) if not lines.is_empty() else "Nenhum código usado ainda."
+
+
+## Uma linha da lista do admin: código, o que dá, usos, validade e o botão de cancelar.
+func _code_row(e: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	var info := "%s · %s · %d/%d usos" % [e["code"], Rewards.describe(e["reward"], e["param"]),
+			int(e["max_uses"]) - int(e["uses_left"]), int(e["max_uses"])]
+	if float(e["expires"]) > 0.0:
+		var d := Time.get_datetime_dict_from_unix_time(int(e["expires"]))
+		info += " · vence %02d/%02d" % [d["day"], d["month"]]
+	var active := not bool(e["revoked"]) and int(e["uses_left"]) > 0
+	if bool(e["revoked"]):
+		info += " · cancelado"
+	var l := _label(info, 13, Color(0.95, 0.94, 0.9) if active else Color(0.6, 0.6, 0.58))
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(l)
+	if active:
+		var cancel := Button.new()
+		cancel.text = "Cancelar"
+		var code := String(e["code"])
+		cancel.pressed.connect(func(): revoke_code_requested.emit(code))
+		row.add_child(cancel)
+	return row
 
 
 # ---------------------------------------------------------------- peças
@@ -182,7 +390,35 @@ func _tab_box(title: String) -> VBoxContainer:
 	var b := VBoxContainer.new()
 	b.name = title
 	b.add_theme_constant_override("separation", 10)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return b
+
+
+## Cada aba rola na vertical se não couber (a Conta e a Admin são compridas).
+func _scroll(content: Control) -> ScrollContainer:
+	var s := ScrollContainer.new()
+	s.name = content.name
+	s.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	s.add_child(content)
+	return s
+
+
+func _row(title: String, control: Control) -> Control:
+	var row := HBoxContainer.new()
+	var l := _label(title, 15)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	row.add_child(control)
+	return row
+
+
+func _spin(lo: int, hi: int, value: int) -> SpinBox:
+	var s := SpinBox.new()
+	s.min_value = lo
+	s.max_value = hi
+	s.step = 1
+	s.value = value
+	return s
 
 
 func _label(text: String, size := 15, color := Color(0.95, 0.94, 0.9)) -> Label:
