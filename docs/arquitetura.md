@@ -50,7 +50,8 @@ headless e rápido (`tests/run_tests.gd`).
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
 - `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população.
+  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população →
+  saída de quem estava em briga → pegadas do faro.
 - Diretor de população (`sim/population_director.gd`, valores em `config.gd`): agrupa os
   jogadores, conta os bots na área de cada grupo e decide onde e qual espécie nasce na
   reposição (`WorldSim.spawn_bot`). A cada 5 s muda de lugar alguns bots congelados longe de
@@ -68,6 +69,7 @@ Cliente → servidor:
 | `c_redeem_code(código)` | confiável | resgata um código (aba Conta); resposta por `s_redeem_result` |
 | `c_staff_create_code(recompensa, parâmetro, usos, dias)` | confiável | só admin; resposta por `s_staff_codes` |
 | `c_staff_list_codes()`, `c_staff_revoke_code(código)` | confiável | só admin; resposta por `s_staff_codes` |
+| `c_sniff()` | confiável | faro (tecla F); resposta por `s_scent` |
 
 RPC nova sempre com nome que vem **depois** de `c_login` (e `s_login_failed`) em ordem alfabética,
 declarada no fim da seção: assim o `c_login` não muda de posição e um jogo de outra versão ainda
@@ -90,6 +92,17 @@ Servidor → cliente:
 | `s_password_changed(ok, texto)` | resposta da troca de senha (o cliente atualiza a senha lembrada) |
 | `s_redeem_result(ok, texto, perks)` | resposta do resgate, com o que a conta tem agora (`beta`, `species`) |
 | `s_staff_codes(lista, criado, texto)` | resposta das ações de admin: lista de códigos, o código recém-criado e uma mensagem |
+| `s_scent(ok, PackedFloat32Array, recarga)` | resposta do faro: `ok` false = ainda em recarga; 5 floats por item (x, z, idade, espécie, tipo: pegada ou carcaça); segundos até poder de novo |
+
+## Faro (`scripts/sim/scent.gd`)
+
+`ScentTrail`, dentro do `WorldSim`: no fim de cada passo, quem andou `SCENT_SPACING_M` desde a
+última pegada deixa outra (posição, `world_time`, espécie, id). Bot congelado e morto não deixam;
+pulo maior que `SCENT_TELEPORT_M` num passo é teleporte e não deixa. Vale tudo em tempo de mundo,
+então com o mundo parado nada envelhece. Guarda no máximo `SCENT_MAX_PRINTS` (as mais velhas saem
+antes) e não vai pro save. `WorldSim.sniff(dino)` confere a recarga (por nome de jogador) e devolve
+as pegadas dos outros e as carcaças com carne no `smell_radius` da espécie. No cliente,
+`ScentView` desenha tudo numa MultiMesh só e apaga sozinho depois de `SNIFF_SHOW_S`.
 
 ## Hitbox
 
