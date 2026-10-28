@@ -175,3 +175,99 @@ func test_golpe_leva_tempo_e_tem_recarga(t) -> void:
 	_run(w, 0.5)
 	t.check(b.health < hp0, "acertou depois da preparação")
 	t.check(b.last_attacker_id == a.id, "alvo sabe quem atacou")
+
+
+# ---------------------------------------------------------------- sair no meio da briga
+
+func test_sair_no_meio_da_briga_deixa_o_dino_10s(t) -> void:
+	var w := _world()
+	var a: Dino = w.login_player("a", "carnotaurus")["dino"]
+	var b: Dino = w.login_player("b", "dryosaurus")["dino"]
+	b.growth = 1.0
+	b.health = b.max_health()
+	w.apply_damage(b, 10.0, a)
+	t.check(not w.request_logout(b.id), "apanhou agora: não sai na hora")
+	t.check(w.dinos.has(b.id), "o dino continua no mundo")
+	_run(w, GameConfig.COMBAT_LOGOUT_S - 1.0)
+	t.check(w.dinos.has(b.id), "ainda no mundo perto do fim do tempo")
+	var hp := b.health
+	w.apply_damage(b, 5.0, a)
+	t.check(b.health < hp, "e continua levando dano")
+	_run(w, 2.0)
+	t.check(not w.dinos.has(b.id), "depois do tempo, sai do mundo")
+	t.check(bool(w.player_records["b"]["alive"]), "e fica salvo, vivo")
+	t.check(w.dinos.has(a.id), "o outro jogador não é afetado")
+
+
+func test_sair_sem_briga_sai_na_hora(t) -> void:
+	var w := _world()
+	var b: Dino = w.login_player("b", "dryosaurus")["dino"]
+	_run(w, GameConfig.COMBAT_LOGOUT_S + 1.0)
+	t.check(w.request_logout(b.id), "sem golpe recente: sai na hora")
+	t.check(not w.dinos.has(b.id), "sumiu do mundo")
+
+
+func test_voltar_durante_a_espera_assume_o_mesmo_dino(t) -> void:
+	var w := _world()
+	var a: Dino = w.login_player("a", "carnotaurus")["dino"]
+	var b: Dino = w.login_player("b", "dryosaurus")["dino"]
+	w.apply_damage(b, 1.0, a)
+	w.request_logout(b.id)
+	_run(w, 3.0)
+	var back: Dictionary = w.login_player("b", "carnotaurus")
+	t.check(back["dino"] == b and back["restored"], "voltou no mesmo dino (sem criar outro)")
+	t.check(w.lingering.is_empty(), "não sai mais sozinho")
+	_run(w, GameConfig.COMBAT_LOGOUT_S + 1.0)
+	t.check(w.dinos.has(b.id), "continua no mundo, jogando")
+	var count := 0
+	for d: Dino in w.dinos.values():
+		if d.player_name == "b":
+			count += 1
+	t.check(count == 1, "um dino só pro bob")
+
+
+func test_morrer_durante_a_espera(t) -> void:
+	var w := _world()
+	var a: Dino = w.login_player("a", "carnotaurus")["dino"]
+	var b: Dino = w.login_player("b", "dryosaurus")["dino"]
+	w.apply_damage(b, 1.0, a)
+	w.request_logout(b.id)
+	b.health = 0.0
+	_run(w, 1.0)
+	t.check(not w.dinos.has(b.id) and w.lingering.is_empty(), "morreu e saiu da espera")
+	t.check(not bool(w.player_records["b"]["alive"]), "volta jovem na próxima vez")
+
+
+# ---------------------------------------------------------------- mapa novo
+
+func test_dinos_dos_jogadores_vao_junto_pro_mapa_novo(t) -> void:
+	# Mapa que diminui (2 km → 512 m): o lugar antigo do bob nem existe no mapa novo.
+	var old := WorldSim.new(GameConfig.WORLD_SEED, 5, 2048.0)
+	old.populate()
+	var bob: Dino = old.login_player("bob", "triceratops")["dino"]
+	bob.pos = Vector3(1500.0, 0.0, 1500.0)
+	bob.growth = 0.7
+	bob.health = bob.max_health() * 0.6
+	bob.hunger = 42.0
+	old.logout_player(bob.id)
+	var ana: Dino = old.login_player("ana", "carnotaurus")["dino"]
+	ana.health = 0.0
+	old.step(0.05)
+	var data: Dictionary = JSON.parse_string(JSON.stringify(old.to_save()))
+	var w := WorldSim.new(GameConfig.WORLD_SEED, 5, 512.0)
+	t.check(w.save_mismatch(data) != "", "o save é de outro mapa")
+	t.check(w.adopt_players(data) == 1, "um dino vivo veio junto")
+	w.populate()
+	var back: Dictionary = w.login_player("bob", "dryosaurus")
+	var b: Dino = back["dino"]
+	t.check(back["restored"] and b.species == "triceratops", "mesmo dino (ignora a espécie escolhida)")
+	t.near(b.growth, 0.7, 0.0001, "mesmo crescimento")
+	t.near(b.hunger, 42.0, 0.0001, "mesma fome")
+	t.near(b.health_ratio(), 0.6, 0.001, "mesma vida")
+	t.check(b.pos.x >= w.terrain.play_min and b.pos.x <= w.terrain.play_max
+			and b.pos.z >= w.terrain.play_min and b.pos.z <= w.terrain.play_max, "dentro do mapa novo")
+	var ground := Movement.ground_y(w.terrain, b.pos.x, b.pos.z, b.body_height())
+	t.near(b.pos.y, ground, 0.01, "no chão do mapa novo")
+	t.check(not w.player_records["bob"].has("relocate"), "só muda de lugar uma vez")
+	var again: Dictionary = w.login_player("ana", "dryosaurus")
+	t.check(not again["restored"], "quem estava morto recomeça jovem")

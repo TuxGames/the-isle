@@ -109,13 +109,18 @@ func test_so_cresce_alimentado_e_mantem_proporcao_de_vida(t) -> void:
 	t.check(d.health_ratio() >= ratio, "crescer não derruba a proporção de vida")
 
 
-func test_dryosaurus_vira_adulto_em_30min(t) -> void:
+func test_dryosaurus_vira_adulto_em_1h(t) -> void:
 	var d := _dino("dryosaurus", 0.0)
 	for i in 30 * 60:
 		d.hunger = 100.0
 		d.thirst = 100.0
 		Metabolism.step(d, 1.0)
-	t.near(d.growth, 1.0, 0.001, "adulto em 30 min jogados")
+	t.near(d.growth, 0.5, 0.001, "metade do caminho em 30 min")
+	for i in 30 * 60:
+		d.hunger = 100.0
+		d.thirst = 100.0
+		Metabolism.step(d, 1.0)
+	t.near(d.growth, 1.0, 0.001, "adulto em 1 h jogada")
 
 
 # ---------------------------------------------------------------- combate

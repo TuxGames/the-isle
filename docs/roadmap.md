@@ -16,15 +16,13 @@
 ## v0.2: população e distância (em andamento)
 
 1. ✅ **Congelar bots longe dos jogadores** (faixas de distância do Marcelo, contando o jogador
-   mais próximo; histerese pra não ficar liga/desliga na borda). No mapa de 512 m quase não
-   congela nada: o ganho aparece com o mapa maior (etapa 3). `/bots` mostra as faixas.
+   mais próximo; histerese pra não ficar liga/desliga na borda). `/bots` mostra as faixas.
 2. ✅ **Diretor de população**: concentrar bots perto dos jogadores; espalhar quando eles estão
    separados; carnívoros com fome → mais herbívoros na área. Age na reposição e mudando de lugar
-   bots congelados; no mapa de 512 m só a reposição age (quase nada congela).
-3. 🟡 **Aumentar o mapa** e subir o padrão pra ~70 bots. Pronto: tamanho configurável no
-   servidor (`--map-size=2048`), terreno desenhado por partes no cliente, save que lembra o
-   tamanho. Falta o Marcelo escolher o tamanho (questionário, pergunta 1) pra trocar o padrão
-   de 512 m e de 20 bots. Com 2048 m e 70 bots o `--bench` deu 1,5 a 2,4% de um núcleo.
+   bots congelados.
+3. ✅ **Aumentar o mapa** e subir o padrão pra ~70 bots: mapa de **2 km** e **70 bots** (R).
+   Terreno desenhado por partes no cliente; trocar o tamanho leva os dinos dos jogadores
+   junto. Com 2048 m e 70 bots o `--bench` deu ~3% de um núcleo.
 4. Testar o servidor no Lenovo de verdade (CPU/RAM com 5 jogadores + 70 bots). A ferramenta
    está pronta (`testar_desempenho.bat` no zip, ou `--bench`); falta rodar no Lenovo e colar
    o resultado aqui.
@@ -34,23 +32,24 @@ Extras (pedidos do Tux):
 - ✅ Tela de configurações (menu e Esc): vídeo (tela cheia, VSync, limite de FPS, distância de
   visão, sombras, campo de visão), controles (sensibilidade, inverter vertical), interface (ajuda
   na tela) e Conta (trocar senha, esquecer a senha lembrada). Fica no PC do jogador.
-- Códigos de resgate com painel de admin (Tux e Marcelo): esperando o Marcelo dizer o que um
-  código pode dar.
+- ✅ Códigos de resgate (R) com painel de admin (Tux e Marcelo): boost de crescimento, acesso
+  beta e liberar espécie. Sem level e sem virar adulto na hora (design, seção 12).
 
 ## v0.3: ferimentos e rastro
 
-- Lista de ferimentos montada com o Marcelo (fratura, sangramento...) com penalidades
-  e tempos de cura por espécie e por atacante.
+- Ferimentos (R, design seção 6): sangramento, fratura e mordida funda, com penalidades e
+  tempos de cura.
 - Habilidade de faro: pegadas/cheiro em amarelo por alguns segundos.
 
 ## v0.4: reprodução
 
-- Parceiro, ninho, ovos, filhotes; comer ovos de outros ninhos.
+- Parceiro (bot ou jogador, R), ninho, ovos, filhotes; comer ovos de outros ninhos.
 
 ## v0.5: clima e estações
 
 - Calendário 9X/X, ciclo de ~80 h jogadas, neve por altitude, seca, rios que encolhem,
   raio só em bots.
+- Dia e noite (R): dia de 1 h jogada (40 min claro + 20 min de noite); neve derrete aos poucos (R).
 
 ## Paralelo (Marcelo)
 

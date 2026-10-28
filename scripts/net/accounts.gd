@@ -9,10 +9,14 @@ extends RefCounted
 ##
 ## O primeiro a entrar com um nome cria a conta com a senha que digitou. Isso vale também
 ## pra quem já tinha dino salvo de antes das contas existirem.
+##
+## Cada conta também guarda o que ganhou com códigos de resgate ("perks", ver Rewards):
+## acesso beta, espécies liberadas e os códigos que já usou.
 
 enum Result { OK, CREATED, WRONG, LOCKED, BAD_KEY }
 
-const FORMAT := 1
+## 2: contas com "perks". Arquivo do formato 1 carrega igual (perks vazios, senha mantida).
+const FORMAT := 2
 ## Senha mais curta aceita (o cliente confere antes de mandar).
 const MIN_PASSWORD := 4
 ## Custo da chave no cliente (uma vez por login) e do hash no servidor.
@@ -22,7 +26,8 @@ const SERVER_ITERATIONS := 1000
 const MAX_FAILS := 5
 const LOCK_S := 60.0
 
-## nome em minúsculas -> {"name": como foi cadastrado, "salt": hex, "hash": hex, "created": unix}
+## nome em minúsculas -> {"name": como foi cadastrado, "salt": hex, "hash": hex, "created": unix,
+##                        "perks": {"beta": bool, "species": [ids], "codes": [códigos usados]}}
 var accounts := {}
 ## nome em minúsculas -> {"count": erros seguidos, "until": unix até quando está bloqueado}
 var _fails := {}
@@ -99,8 +104,41 @@ func change_key(player_name: String, old_key: String, new_key: String, now: floa
 		return Result.WRONG
 	_fails.erase(n)
 	var acc: Dictionary = accounts[n]
-	accounts[n] = _new_record(String(acc["name"]), new_key, float(acc.get("created", now)))
+	var rec := _new_record(String(acc["name"]), new_key, float(acc.get("created", now)))
+	rec["perks"] = perks(player_name)
+	accounts[n] = rec
 	return Result.OK
+
+
+## O que a conta ganhou com códigos. É o próprio dicionário guardado: Rewards.apply muda
+## nele e o GameServer grava o arquivo. Conta que não existe devolve um vazio solto.
+func perks(player_name: String) -> Dictionary:
+	var acc: Dictionary = accounts.get(_norm(player_name), {})
+	if acc.is_empty():
+		return {"beta": false, "species": [], "codes": []}
+	if not acc.has("perks"):
+		acc["perks"] = {}
+	var p: Dictionary = acc["perks"]
+	if not p.has("beta"):
+		p["beta"] = false
+	if not p.has("species"):
+		p["species"] = []
+	if not p.has("codes"):
+		p["codes"] = []
+	return p
+
+
+## Anota que a conta usou o código (fica junto do que ela ganhou).
+func mark_redeemed(player_name: String, code: String) -> void:
+	var list: Array = perks(player_name)["codes"]
+	if not list.has(code):
+		list.append(code)
+
+
+## Resumo pro cliente (aba Conta): {"beta": bool, "species": [ids]}.
+func perks_summary(player_name: String) -> Dictionary:
+	var p := perks(player_name)
+	return {"beta": bool(p["beta"]), "species": Array(p["species"]).duplicate()}
 
 
 func to_dict() -> Dictionary:

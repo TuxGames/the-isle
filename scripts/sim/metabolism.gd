@@ -92,7 +92,12 @@ static func step(d: Dino, dt: float) -> void:
 	if d.growth < 1.0 and d.hunger > GROW_MIN_FOOD and d.thirst > GROW_MIN_FOOD:
 		var ratio := d.health / max_hp
 		var grow_min: float = sp["grow_minutes"]
-		d.growth = minf(1.0, d.growth + dt / (grow_min * 60.0))
+		var mult := 1.0
+		if d.growth_boost_s > 0.0:
+			# Boost de crescimento (código de resgate): só gasta enquanto cresce.
+			mult = GameConfig.GROWTH_BOOST_MULT
+			d.growth_boost_s = maxf(0.0, d.growth_boost_s - dt)
+		d.growth = minf(1.0, d.growth + dt / (grow_min * 60.0) * mult)
 		d.health = ratio * d.max_health()
 
 	if d.attack_cooldown > 0.0:

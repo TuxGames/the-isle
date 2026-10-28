@@ -415,6 +415,8 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 	elif g < 1.0:
 		phase = "subadulto"
 	var rest := "  · descansando" if st[Net.ST_RESTING] > 0.5 else ""
+	if st.size() > Net.ST_GROWTH_BOOST and st[Net.ST_GROWTH_BOOST] > 0.0 and g < 1.0:
+		rest += "  · boost %d min" % ceili(st[Net.ST_GROWTH_BOOST] / 60.0)
 	_species_label.text = "%s — %s%s" % [Species.display_name(species_id), phase, rest]
 	var wt: float = st[Net.ST_WORLD_TIME]
 	_clock_label.text = "Tempo do mundo: %dh %02dmin" % [int(wt / 3600.0), int(fmod(wt, 3600.0) / 60.0)]

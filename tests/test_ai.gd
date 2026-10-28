@@ -127,7 +127,8 @@ func test_carga_100_bots(t) -> void:
 
 
 func _load_test(t, bots: int, seconds: float) -> void:
-	var w := WorldSim.new(GameConfig.WORLD_SEED, bots)
+	# Mapa pequeno de propósito: todo mundo perto, brigando e ativo (o pior caso pro servidor).
+	var w := WorldSim.new(GameConfig.WORLD_SEED, bots, 512.0)
 	w.populate()
 	var dt := 1.0 / GameConfig.SIM_HZ
 	var steps := int(seconds / dt)

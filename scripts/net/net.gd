@@ -38,7 +38,9 @@ const ST_SPRINT := 7
 const ST_INTERACT := 8
 const ST_RESTING := 9
 const ST_WORLD_TIME := 10
-const ST_COUNT := 11
+## Segundos de boost de crescimento que ainda faltam (código de resgate).
+const ST_GROWTH_BOOST := 11
+const ST_COUNT := 12
 
 signal welcome_received(info: Dictionary)
 signal login_failed(reason: String)
@@ -50,6 +52,8 @@ signal event_received(kind: int, a: int, b: int, value: float, text: String)
 signal died(cause: String)
 signal message_received(text: String)
 signal password_changed(ok: bool, text: String)
+signal redeem_result(ok: bool, text: String, perks: Dictionary)
+signal staff_codes(codes: Array, created: String, text: String)
 
 ## GameServer quando este processo é o servidor; null no cliente.
 var server: Node = null
@@ -92,6 +96,36 @@ func c_password(key: String) -> void:
 func c_set_password(old_key: String, new_key: String) -> void:
 	if server:
 		server.on_change_password(multiplayer.get_remote_sender_id(), old_key, new_key)
+
+
+# Códigos de resgate. Os nomes vêm depois de "c_login" em ordem alfabética e são declarados
+# no fim: assim o c_login não muda de posição e um jogo de outra versão ainda recebe
+# "versão diferente". A resposta vem por s_redeem_result / s_staff_codes.
+
+## Jogador resgata um código (aba Conta).
+@rpc("any_peer", "call_remote", "reliable")
+func c_redeem_code(code: String) -> void:
+	if server:
+		server.on_redeem_code(multiplayer.get_remote_sender_id(), code)
+
+
+## Admin cria um código (aba Admin). `days` = 0: sem validade.
+@rpc("any_peer", "call_remote", "reliable")
+func c_staff_create_code(reward: String, param: String, uses: int, days: int) -> void:
+	if server:
+		server.on_staff_create_code(multiplayer.get_remote_sender_id(), reward, param, uses, days)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_staff_list_codes() -> void:
+	if server:
+		server.on_staff_list_codes(multiplayer.get_remote_sender_id())
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func c_staff_revoke_code(code: String) -> void:
+	if server:
+		server.on_staff_revoke_code(multiplayer.get_remote_sender_id(), code)
 
 
 # ============================================================ servidor → cliente
@@ -145,6 +179,19 @@ func s_message(text: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_password_changed(ok: bool, text: String) -> void:
 	password_changed.emit(ok, text)
+
+
+## Resposta do c_redeem_code, com o que a conta tem agora ({"beta", "species"}).
+@rpc("authority", "call_remote", "reliable")
+func s_redeem_result(ok: bool, text: String, perks: Dictionary) -> void:
+	redeem_result.emit(ok, text, perks)
+
+
+## Resposta das ações de admin: a lista de códigos, o código recém-criado ("" se nenhum) e
+## uma mensagem.
+@rpc("authority", "call_remote", "reliable")
+func s_staff_codes(codes: Array, created: String, text: String) -> void:
+	staff_codes.emit(codes, created, text)
 
 
 # ============================================================ conexão (cliente)

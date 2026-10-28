@@ -7,7 +7,12 @@ de engenharia tomadas com o Tux em 20–21/10/2026.
 ChatGPT fez e o Marcelo não confirmou (ou corrigiu depois) ficam em "Em aberto" ou não
 entram. Quando o Marcelo mudar de ideia, atualiza aqui primeiro e no código depois.
 
-Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡 parcial · ⬜ futuro
+Status de cada item: ✅ implementado e testado · 🟡 parcial · ⬜ futuro
+
+**(R)** = recomendação do Claude que o Marcelo aprovou em 28/10/2026 ("vai fazendo do jeito que
+você recomendar, com a possibilidade de mudar no futuro de maneira simples"). Todo número de uma
+decisão (R) fica em `scripts/config.gd` ou `scripts/data/species.gd`, com comentário: mudar é
+trocar o valor ali.
 
 > Nome do jogo: a definir. "The Isle" é o jogo comercial que serviu de inspiração.
 > É o nome do repositório, não o nome final.
@@ -32,21 +37,22 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | **Sem nenhum jogador conectado, o mundo inteiro fica parado** (nada envelhece, cura, passa fome, muda de estação) | ✅ |
 | Com pelo menos 1 jogador conectado o mundo roda, e quem voltar depois pode encontrar o mundo mudado | ✅ |
 | **Ao sair, o dino do jogador é deslogado**: some do mundo, não pode ser atacado, não cura, não passa fome, não cresce. Volta exatamente igual | ✅ (vale até reiniciando o servidor) |
+| (R) Exceção: quem sai até 10 s depois de levar um golpe deixa o dino mais 10 s no mundo, parado e vulnerável (não dá pra fugir de uma briga fechando o jogo). Voltar nesse tempo assume o mesmo dino | ✅ `COMBAT_LOGOUT_S` |
 | Ao morrer, o jogador **obrigatoriamente recomeça jovem** | ✅ |
 
 ## 3. População de bots
 
 | Decisão | Status |
 |---|---|
-| População média **~70 bots**, **máximo 100** | 🟡 o padrão é 20 porque o mapa da v0.1 é pequeno (512 m); `--bots=N` vai até 100. Carga testada com 70 e 100 |
+| População média **~70 bots**, **máximo 100** | ✅ padrão 70 (`DEFAULT_BOT_TARGET`, `--bots=N` até 100). Carga testada com 70 e 100 |
 | Bots têm acesso a todas as espécies que o jogador tem | ✅ (as 3 que existem) |
 | Bem mais herbívoros que carnívoros, "mas não muito mais" | ✅ (65% / 35%) |
 | Carnívoros também se atacam entre si | ✅ (carnívoro com fome ataca carnívoro menor; canibalismo só morrendo de fome) |
 | **Hitbox plausível**: só toma dano se a mordida realmente acertar | ✅ |
-| A maioria dos bots fica congelada (longe dos jogadores) | 🟡 congelamento pronto (ver seção 5). No mapa de 512 m quase nada fica longe o bastante; com 2 km e 70 bots, 40 a 66 ficam congelados (`--bench --map-size=2048`) |
+| A maioria dos bots fica congelada (longe dos jogadores) | ✅ (ver seção 5). No mapa de 2 km com 70 bots e o diretor de população: 16 a 37 congelados, conforme os jogadores estão espalhados ou juntos (`--bench`) |
 | **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 |
-| Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ✅ diretor de população: cada grupo de jogadores (a até 200 m um do outro) quer 60% da população dividida pelo número de grupos, na área de 260 m em volta. Age na reposição e mudando de lugar bots congelados que ninguém vê. Números provisórios. No mapa de 512 m quase nada congela, então hoje só a reposição age |
-| Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ✅ "com fome" = fome abaixo de 50; "herbívoro demais" = mais de 80% da área. A proporção geral só sai 10% dos 65/35. Números provisórios |
+| Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ✅ diretor de população: cada grupo de jogadores (a até 200 m um do outro) quer 60% da população dividida pelo número de grupos, na área de 260 m em volta. Age na reposição e mudando de lugar bots congelados que ninguém vê. (R) números em `config.gd` (seção "Diretor de população") |
+| Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ✅ "com fome" = fome abaixo de 50; "herbívoro demais" = mais de 80% da área. A proporção geral só sai 10% dos 65/35. (R) números em `config.gd` |
 
 ## 4. IA
 
@@ -59,8 +65,9 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 
 | Decisão | Status |
 |---|---|
-| Mapa grande, mas só carrega a área num raio grande em volta de cada jogador | 🟡 pronto pra qualquer tamanho (`--map-size`, de 256 m a 8 km): o cliente só desenha ~1,1 km em volta do jogador, com menos detalhe longe. O padrão continua 512 m até o Marcelo decidir o tamanho |
-| Simulação por faixas de distância (exemplo do Marcelo: >15 células estático; ~10 começa a ativar; ≤5 normal) | ✅ com células de 32 m: até 160 m roda normal (20 Hz); mais longe roda a 10 Hz; congela acima de 480 m e só acorda a 320 m (histerese). Metros escolhidos pelo Tux, falta o Marcelo confirmar |
+| Mapa grande, mas só carrega a área num raio grande em volta de cada jogador | ✅ o cliente só desenha até ~1,1 km em volta do jogador, com menos detalhe longe |
+| (R) Tamanho do mapa: **2 km** de lado (uns 7 min andando de um lado ao outro) | ✅ `DEFAULT_MAP_SIZE` e `--map-size=2048` no `iniciar_servidor.bat`. Trocar o tamanho leva os dinos dos jogadores junto (lugar novo, mesmo dino); só os bots recomeçam |
+| Simulação por faixas de distância (exemplo do Marcelo: >15 células estático; ~10 começa a ativar; ≤5 normal) | ✅ com células de 32 m: até 160 m roda normal (20 Hz); mais longe roda a 10 Hz; congela acima de 480 m e só acorda a 320 m (histerese). (R) células de 32 m |
 | Bot longe congelado: ferido continua ferido, luta congela | ✅ e enquanto congelado ninguém enxerga, persegue ou morde ele |
 | A distância considera o jogador mais próximo, não só o host | ✅ |
 
@@ -71,7 +78,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Recuperação diferente por espécie e por tipo/grau de ferimento | ⬜ |
 | Exemplo: animal pequeno mordido por um muito grande pode quebrar osso → demora mais | ⬜ |
 | Cura acelerada: ~10 min dependendo do ferimento, nada de horas | 🟡 (v0.1: cura genérica de vida, cheia em 8 min, 4 min descansando) |
-| Lista de ferimentos: **vai ser montada com o Marcelo** | ⬜ |
+| (R) Lista de ferimentos (detalhes e números ajustados ao implementar): **sangramento** (golpe que tira mais de 15% da vida: perde vida devagar por ~3 min), **fratura** (mordida de um bicho pelo menos 3x mais pesado: anda mais devagar e não corre por ~10 min) e **mordida funda** (cura pela metade por ~6 min). Descansar sara mais rápido | ⬜ v0.3 |
 
 ## 7. Fome, sede e metabolismo
 
@@ -90,6 +97,7 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 |---|---|
 | Nascer, crescer, reproduzir e morrer. **Reprodução é obrigatória** | 🟡 crescer e morrer ✅; reprodução ⬜ |
 | Encontrar parceiro e construir ninho | ⬜ |
+| (R) O parceiro pode ser bot ou jogador (com 5 jogadores, exigir parceiro jogador travaria algo que é obrigatório) | ⬜ v0.4 |
 | Dá pra comer ovos de outros ninhos e filhotes | 🟡 filhotes podem ser caçados; ovos ⬜ |
 
 ## 9. Progressão do jogador
@@ -98,6 +106,10 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 |---|---|
 | O jogo favorece o jogador de acordo com a fase: filhote = tranquilo com algum perigo; médio = mais perigo; grande = não impossível | 🟡 (filhote nasce longe de carnívoros e os bots só percebem ele mais perto) |
 | T-Rex, Espinossauro e Giganotossauro adultos dominam com facilidade (chegar no adulto é a parte difícil) | ⬜ (espécies ainda não existem) |
+| (R) Espécies: as 3 de hoje; as próximas entram junto com os modelos 3D, começando por T-Rex, Espinossauro e Giganotossauro | 🟡 |
+| (R) Ao nascer ou renascer, começa **filhote** (10% do tamanho de adulto) | ✅ `PLAYER_START_GROWTH` |
+| (R) Tempo jogado até virar adulto: Dryosaurus 1 h, Carnotaurus 2 h, Triceratops 3 h | ✅ `grow_minutes` em `species.gd` |
+| (R) Triceratops x Carnotaurus fica como está (trike adulto inteiro é perigoso; o carnotauro caça os menores e os feridos) | ✅ |
 | Carnotauro (médio) vive em perigo constante, mas sem exagero | 🟡 |
 | Tem que parecer orgânico e o jogador tem que se sentir confortável | 🟡 |
 
@@ -121,6 +133,23 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Escassez com causa plausível (chuva forte, seca...) | ⬜ |
 | Seca: rio pequeno seca, rio gigante só diminui | ⬜ |
 | Morte por raio **só para bots**, nunca para jogadores | ⬜ |
+| (R) Dia e noite: um dia dura 1 h jogada (40 min claro + 20 min de noite) | ⬜ v0.5 |
+| (R) Neve acumulada derrete aos poucos depois da nevasca | ⬜ v0.5 |
+
+## 12. Códigos de resgate (R)
+
+Ideia do Tux (24/10). As recompensas são recomendação aprovada pelo Marcelo (28/10); tudo fica em
+`scripts/sim/rewards.gd` e `config.gd`, pra mudar fácil.
+
+| Decisão | Status |
+|---|---|
+| Admins (criam e cancelam códigos no jogo): **Tux e Marcelo**, por nome de conta (`DEFAULT_ADMINS`; o servidor troca com `--admins=Nome1,Nome2`) | ✅ aba Admin das configurações, só aparece pra admin; o servidor confere tudo |
+| O jogador resgata na aba **Conta**; cada conta usa um mesmo código uma vez só | ✅ |
+| Código: `DINO-XXXX-XXXX`, sem 0/O/1/I; escolhe quantas pessoas podem usar e por quantos dias vale | ✅ 5 códigos errados num minuto bloqueiam a conta por 1 minuto |
+| **Boost de crescimento**: +50% de velocidade por 60 min (o admin escolhe de 5 a 600 min); só gasta enquanto o dino cresce, não se perde ao sair nem ao morrer | ✅ |
+| **Acesso beta**: libera as espécies marcadas `beta` | ✅ (hoje nenhuma espécie é beta) |
+| **Liberar espécie**: libera uma espécie marcada `locked` | ✅ (hoje nenhuma é trancada) |
+| **Não existe** recompensa de "level" nem de virar adulto na hora: chegar no adulto é a parte difícil (seção 9) e quem morre recomeça jovem | ✅ |
 
 ---
 
@@ -138,21 +167,21 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
   seguidas bloqueiam o nome por 1 minuto.
 - Mapa gerado por código com semente fixa (servidor e clientes geram o mesmo terreno), com um
   rio atravessando e montanhas na borda. O **tamanho é escolhido no servidor** (`--map-size`,
-  padrão 512 m, o da v0.1) e vai pros clientes no login; rio, arbustos e água escalam junto.
-  O mapa definitivo vem depois.
+  padrão 2 km) e vai pros clientes no login; rio, arbustos e água escalam junto. Com 512 m o
+  terreno é exatamente o da v0.1.
 - Os modelos da v0.1 são montados **a partir das próprias esferas da hitbox**: o que se vê é
   exatamente o que a mordida acerta. Saem quando entrarem modelos 3D de verdade.
 - Save do servidor: um JSON (`world.json`), gravado a cada 30 s, a cada saída e a cada morte.
 - Rede entre amigos: o servidor fica em casa, provavelmente atrás de CGNAT. Plano:
   **Tailscale** (ou ZeroTier/Radmin) em todos os PCs. Ver README.
 
-## Valores de equilíbrio da v0.1 (provisórios, ajustar jogando)
+## Valores de equilíbrio (ajustar jogando)
 
 | Espécie | Tipo | Massa adulta | Vida adulta | Dano adulto | Crescer até adulto |
 |---|---|---|---|---|---|
-| Carnotaurus | carnívoro | 1.500 kg | 1.200 | 140 (mordida) | 60 min jogados |
-| Triceratops | herbívoro (revida) | 6.000 kg | 2.200 | 160 (chifrada) | 90 min jogados |
-| Dryosaurus | herbívoro (foge) | 90 kg | 250 | 15 (coice) | 30 min jogados |
+| Carnotaurus | carnívoro | 1.500 kg | 1.200 | 140 (mordida) | 2 h jogadas (R) |
+| Triceratops | herbívoro (revida) | 6.000 kg | 2.200 | 160 (chifrada) | 3 h jogadas (R) |
+| Dryosaurus | herbívoro (foge) | 90 kg | 250 | 15 (coice) | 1 h jogada (R) |
 
 - Dano por parte atingida: cabeça 1,25x · pescoço 1,2x · peito 1,05x · tronco 1x · pernas 0,9x · cauda 0,6x.
 - Vida e dano escalam com o tamanho (filhote de carnotauro morde com ~10% da força do adulto).
@@ -164,29 +193,6 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 
 ## Em aberto (perguntar ao Marcelo)
 
-- **Códigos de resgate** (ideia do Tux, 24/10): o admin cria códigos no jogo e o jogador resgata na
-  aba Conta. O que um código pode dar (crescimento? espécie? acesso antecipado?) esbarra em
-  "morreu → recomeça jovem", então o Tux vai decidir com o Marcelo. Já decidido: admins são o
-  Tux e o Marcelo.
-
-As perguntas abaixo estão num questionário pro Marcelo responder (página privada do Tux no
-claude.ai: https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7). As respostas ficam no banco da
-página, coleção `respostas`, documento `marcelo`. Quando chegarem, passe as decisões pra cá.
-
-- Lista de ferimentos (tipos, penalidades, tempo de cura por espécie).
-- Lista final de espécies e quantas no total.
-- Tempo de crescimento real de cada espécie (os da tabela são de teste).
-- "Começar jovem": jovem mesmo ou filhote/ovo? (v0.1 começa com 10% de crescimento)
-- Reprodução entre jogador e bot vale?
-- Proteção contra sair do jogo no meio da luta (sugestão do ChatGPT, não decidida).
-- Neve acumulada derrete aos poucos depois da nevasca? (a pergunta ficou sem resposta)
-- Tamanho do mapa final (pergunta 1 do questionário: 1, 2 ou 4 km). O código já aceita
-  qualquer um; falta a escolha. Depois disso sobe o padrão de bots pra ~70 (roadmap v0.2, etapa 3).
-- Tamanho da "célula" do exemplo das distâncias. Usamos 32 m (160 / 320 / 480 m). Está bom?
-- Números do diretor de população (provisórios, em `config.gd`): o que é "juntos" (200 m),
-  o tamanho da área de cada grupo (260 m), quanto da população fica perto dos jogadores (60%),
-  o que é "com fome" (abaixo de 50) e "herbívoro demais" (mais de 80% da área), e quanto a
-  proporção geral pode sair dos 65/35 por causa disso (10%).
-- Equilíbrio: na v0.1 um triceratops adulto mata um carnotauro adulto parado com 6 chifradas
-  na cabeça. Está bom assim?
-- Ciclo de dia e noite (não foi discutido).
+Nada pendente. Em 28/10/2026 o Marcelo mandou seguir as recomendações do Claude em tudo que estava aqui. Elas
+viraram decisões (R) nas seções acima. O questionário (página privada do Tux no claude.ai:
+https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7) continua lá caso ele queira mudar alguma.

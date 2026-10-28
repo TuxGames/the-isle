@@ -15,6 +15,9 @@ extends Node
 ##   troca_senha entra como dani, tenta trocar a senha com a atual errada (recusado) e
 ##               depois com a certa (aceito).
 ##   dani_nova   entra como dani com a senha nova.
+##   admin_cria  entra como Tux (admin), cria um código de boost com 2 usos e grava em --out.
+##   resgata     entra como eva (não é admin), resgata o código de --code-file, não consegue
+##               resgatar de novo nem criar código, e recebe o boost nos próprios status.
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -81,6 +84,10 @@ func _on_connected() -> void:
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
 	if role in ["troca_senha", "dani_nova"]:
 		pname = "dani"
+	elif role == "admin_cria":
+		pname = "Tux"
+	elif role == "resgata":
+		pname = "eva"
 	var password := "chute-errado" if role == "intruso" else "senha-" + pname
 	if role == "dani_nova":
 		password = "nova-dani"
@@ -103,6 +110,10 @@ func _on_connected() -> void:
 			_troca_senha()
 		"dani_nova":
 			_dani_nova()
+		"admin_cria":
+			_admin_cria()
+		"resgata":
+			_resgata()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -134,6 +145,57 @@ func _troca_senha() -> void:
 
 func _dani_nova() -> void:
 	_check(await _wait_for(func(): return not welcome.is_empty(), 10.0), "entrou com a senha nova")
+	_finish()
+
+
+func _admin_cria() -> void:
+	var answers: Array = []
+	Net.staff_codes.connect(func(list, created, text): answers.append([list, created, text]))
+	if not await _wait_for(func(): return not welcome.is_empty(), 10.0):
+		_fail("não entrou")
+		return _finish()
+	_check(bool(welcome.get("admin", false)), "Tux é admin")
+	Net.c_staff_create_code.rpc_id(1, "boost_crescimento", "60", 2, 0)
+	if not await _wait_for(func(): return answers.any(func(a): return a[1] != ""), 10.0):
+		_fail("o código não foi criado")
+		return _finish()
+	var made: Array = answers.filter(func(a): return a[1] != "")[0]
+	var code: String = made[1]
+	_check(code.begins_with("DINO-") and code.length() == 14, "código criado (%s)" % code)
+	_check(Array(made[0]).any(func(e): return e["code"] == code), "aparece na lista")
+	var f := FileAccess.open(String(args.get("out", "")), FileAccess.WRITE)
+	f.store_string(code)
+	f.close()
+	_finish()
+
+
+func _resgata() -> void:
+	var results: Array = []
+	var staff: Array = []
+	Net.redeem_result.connect(func(ok, text, perks): results.append([ok, text, perks]))
+	Net.staff_codes.connect(func(list, created, text): staff.append([list, created, text]))
+	if not await _wait_for(func(): return not welcome.is_empty(), 10.0):
+		_fail("não entrou")
+		return _finish()
+	_check(not bool(welcome.get("admin", false)), "eva não é admin")
+	var code := FileAccess.get_file_as_string(String(args.get("code-file", ""))).strip_edges()
+	Net.c_redeem_code.rpc_id(1, code.to_lower())
+	if not await _wait_for(func(): return results.size() >= 1, 10.0):
+		_fail("sem resposta do resgate")
+		return _finish()
+	_check(results[0][0], "resgatou (\"%s\")" % results[0][1])
+	Net.c_redeem_code.rpc_id(1, code)
+	if not await _wait_for(func(): return results.size() >= 2, 10.0):
+		_fail("sem resposta do segundo resgate")
+		return _finish()
+	_check(not results[1][0], "não resgata o mesmo código de novo (\"%s\")" % results[1][1])
+	_check(await _wait_for(func(): return stats.size() > Net.ST_GROWTH_BOOST and stats[Net.ST_GROWTH_BOOST] > 3000.0, 5.0),
+			"recebeu o boost de 60 min")
+	Net.c_staff_create_code.rpc_id(1, "acesso_beta", "", 1, 0)
+	if not await _wait_for(func(): return staff.size() >= 1, 10.0):
+		_fail("sem resposta ao tentar criar código")
+		return _finish()
+	_check(staff[0][1] == "" and Array(staff[0][0]).is_empty(), "quem não é admin não cria código (\"%s\")" % staff[0][2])
 	_finish()
 
 
@@ -238,7 +300,7 @@ func _alice() -> void:
 		_check(e[2] == bob_id and e[3] > 0.0, "dano registrado no bob (%.1f, parte: %s)" % [e[3], e[4]])
 
 	# Bob sai depois de ser mordido: o dino dele tem que sumir do mundo.
-	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0)
+	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0 + GameConfig.COMBAT_LOGOUT_S)
 	_check(gone, "dino do bob some quando ele sai")
 
 	# Alice continua jogando sozinha: o mundo segue andando.
@@ -261,6 +323,9 @@ func _bob() -> void:
 	var hp0: float = stats[Net.ST_HEALTH]
 	var bitten := await _wait_for(func(): return stats[Net.ST_HEALTH] < hp0 - 0.01, 40.0)
 	_check(bitten, "levou a mordida (vida %.1f → %.1f)" % [hp0, stats[Net.ST_HEALTH]])
+	# Espera passar o tempo de briga: quem sai logo depois de apanhar deixa o dino mais um pouco
+	# no mundo (test_world cobre isso). Aqui o bob tem que voltar exatamente igual.
+	await _wait(GameConfig.COMBAT_LOGOUT_S + 0.5)
 	# Fome e sede em 20%: não cura nem passa fome rápido, então a vida fica parada
 	# e dá pra comparar com precisão quando ele voltar.
 	_dev("/food 20 20")
