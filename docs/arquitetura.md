@@ -22,9 +22,9 @@ Um único executável faz os dois papéis. `scripts/main.gd` decide:
 |---|---|---|
 | `scripts/data/` | Tabela de espécies e números de equilíbrio | nada |
 | `scripts/world/` | `Terrain`: altura, rio, arbustos, pontos de água | nada |
-| `scripts/sim/` | Lógica do mundo: `Dino`, `Metabolism`, `Injuries`, `Combat`, `Movement`, `BotBrain`, `WorldSim` | data, world |
+| `scripts/sim/` | Lógica do mundo: `Dino`, `Metabolism`, `Injuries`, `Combat`, `Movement`, `BotBrain`, `Nests`, `WorldSim` | data, world |
 | `scripts/net/` | `net.gd` (autoload `Net`, **todas** as RPCs) e `GameServer` | sim |
-| `scripts/client/` | `GameClient`, `DinoView`, `TerrainView` | sim (só leitura), net |
+| `scripts/client/` | `GameClient`, `DinoView`, `TerrainView`, `ScentView`, `NestView` | sim (só leitura), net |
 | `scripts/ui/` | `Hud` (menu, barras, morte, pausa, chat) | data |
 | `tests/` | Testes de unidade (`test_*.gd`) e o cliente de teste de rede | tudo |
 | `tools/` | Scripts de teste, print e exportação | — |
@@ -50,7 +50,8 @@ headless e rápido (`tests/run_tests.gd`).
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
 - `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população →
+  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → ninhos (construção, pedidos,
+  choco) → diretor de população →
   saída de quem estava em briga → pegadas do faro.
 - Ferimentos (`sim/injuries.gd`, valores em `config.gd`): cada golpe que acerta passa por
   `Injuries.from_hit`, que abre sangramento, fratura ou mordida funda em `dino.injuries`
@@ -75,12 +76,14 @@ Cliente → servidor:
 | `c_staff_create_code(recompensa, parâmetro, usos, dias)` | confiável | só admin; resposta por `s_staff_codes` |
 | `c_staff_list_codes()`, `c_staff_revoke_code(código)` | confiável | só admin; resposta por `s_staff_codes` |
 | `c_sniff()` | confiável | faro (tecla F); resposta por `s_scent` |
+| `c_mate()` | confiável | parceiro (tecla R): pede a postura no próprio ninho ou aceita o pedido de outro jogador; respostas por `s_message`/`s_nests` |
+| `c_nest(segurando)` | confiável | ninho (tecla N): `true` ao apertar, `false` ao soltar; o servidor conta os 8 s parado |
 
 RPC nova sempre com nome que vem **depois** de `c_login` (e `s_login_failed`) em ordem alfabética,
 declarada no fim da seção: assim o `c_login` não muda de posição e um jogo de outra versão ainda
 recebe "versão diferente".
 | `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
-| `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer, comando dev, chat |
+| `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer (texto = espécie, ou `"nest"` pra nascer no próprio ninho), comando dev, chat |
 
 Servidor → cliente:
 
@@ -90,7 +93,7 @@ Servidor → cliente:
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando (vida baixa ou osso quebrado), nadando, andando) |
-| `s_self_stats(PackedFloat32Array)` | vida, vida máx., comida, água, fôlego, crescimento, vel. andar/correr (já com a fratura), interação, descansando, tempo do mundo, segundos de boost de crescimento, segundos que faltam de sangramento, fratura e mordida funda (`ST_BLEED`, `ST_FRACTURE`, `ST_DEEP`; 0 = não tem) |
+| `s_self_stats(PackedFloat32Array)` | vida, vida máx., comida, água, fôlego, crescimento, vel. andar/correr (já com a fratura), interação, descansando, tempo do mundo, segundos de boost de crescimento, segundos que faltam de sangramento, fratura e mordida funda (`ST_BLEED`, `ST_FRACTURE`, `ST_DEEP`; 0 = não tem); reprodução (15 a 21): ovos no meu ninho (-1 = sem ninho), ovo pronto pra mim, segundos até chocar, recarga da postura, progresso do ninho segurando N (-1 = não está fazendo), segundos pra aceitar um pedido de parceiro e o id de quem pediu (`ST_NEST_EGGS` … `ST_MATE_FROM`) |
 | `s_roster(dict)` | id → nome dos jogadores online |
 | `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte |
 | `s_died(causa)`, `s_message(texto)` | morte do próprio jogador; mensagens/chat |
@@ -98,6 +101,29 @@ Servidor → cliente:
 | `s_redeem_result(ok, texto, perks)` | resposta do resgate, com o que a conta tem agora (`beta`, `species`) |
 | `s_staff_codes(lista, criado, texto)` | resposta das ações de admin: lista de códigos, o código recém-criado e uma mensagem |
 | `s_scent(ok, PackedFloat32Array, recarga)` | resposta do faro: `ok` false = ainda em recarga; 5 floats por item (x, z, idade, espécie, tipo: pegada ou carcaça); segundos até poder de novo |
+| `s_nests(lista, meu)` | ninhos, mandado no login e quando algo muda: lista de `{id, pos, sp (índice da espécie), owner, eggs (vagas com ovo), ready (vagas com o ovo pronto pro dono)}` e o ninho de quem recebe (`has_nest`, `eggs`, `ready`, `species`: o botão "Nascer no ninho") |
+
+## Reprodução (`scripts/sim/nests.gd`)
+
+`Nests`, dentro do `WorldSim` (`sim.nests`), números em `config.gd` (seção "Reprodução") e
+`clutch`/`egg_kg` em `species.gd`. Guarda os ninhos (`nests`: dono, espécie, posição, ovos em
+vagas fixas em volta do centro, `hatch_at` em tempo de mundo), a recarga da postura por jogador
+(`lay_ready`) e, só na memória, a recarga dos bots parceiros, os pedidos entre jogadores, quem está
+segurando N e quem está comendo ovo.
+
+- `set_building` (N) e `step`: 8 s parado → `build`. `press_mate` (R): aceita o pedido que
+  chegou ou procura parceiro (`partners_near`); bot responde na hora (`bot_refusal`), jogador
+  recebe o pedido (`requests`, 15 s). A postura (`lay`) põe `clutch` ovos e marca a recarga.
+- `step` → `_step_hatching`: no `hatch_at` o primeiro ovo do dono fica `ready` e os outros viram
+  bots filhotes (`hatch_bot`) enquanto houver vaga até `BOT_MAX`. `respawn_in_nest` usa o ovo
+  pronto (Action.RESPAWN com `"nest"`).
+- Ovo comido: `WorldSim._interact` pergunta `egg_in_reach` (só carnívoro) e chama `eat_egg`
+  (3 s segurando E). O bot carnívoro com fome usa o estado `eat_egg` do `BotBrain`.
+- Bots: `WorldSim._process_respawns` chama `try_bot_nest`; 25% das reposições (com jogador no
+  mundo) viram ninho de bot no lugar que o diretor de população escolheria. Ninho de bot com
+  ovos conta como um bot (`bot_slots`) pra reposição não encher em dobro.
+- O servidor só repassa: `_flush_nests` manda os avisos (`messages`) e, se `dirty`, o `s_nests`
+  pra todos. `NestView` (cliente) desenha anel e ovos.
 
 ## Faro (`scripts/sim/scent.gd`)
 
@@ -153,7 +179,7 @@ precisa ter sido liberada; `beta` precisa de acesso beta. Arquivo ilegível: o s
 
 ## Save (`world.json`)
 
-`format`, `version`, `seed`, `map_size`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `bush_food[]`,
+`format`, `version`, `seed`, `map_size`, `world_time`, `next_id`, `bots[]`, `carcasses[]`, `nests{}`, `bush_food[]`,
 `players{nome: {alive, dino}}`, `respawn_queue[]`. Os jogadores conectados são gravados
 como estão naquele instante; quem está offline fica congelado no registro.
 
@@ -162,6 +188,10 @@ como estão naquele instante; quem está offline fica congelado no registro.
   Quem morre leva o boost pro próximo dino (o registro de morto guarda o campo).
 - Formato 4 (v0.3): os dinos têm `injuries` ({"sangramento"/"fratura"/"mordida_funda": segundos
   que faltam}); save antigo carrega sem ferimentos. Morrer zera os ferimentos.
+- Formato 5 (v0.4): `nests` = `{list: [{id, owner, species, pos, eggs: [{slot, ready}], hatch_at,
+  laid, bot_slot}], lay_ready: {nome: world_time}}` (`Nests.to_save`). Save do formato 4 carrega
+  sem ninhos e sem recarga; os dinos vêm iguais. Trocar de mapa (`adopt_players`) não leva os
+  ninhos (eles são do lugar), só os dinos.
 - Tamanho do mapa ao subir o servidor: o de `--map-size`; senão o do save; senão 512 m.
 - Save de outro mapa (semente ou tamanho diferente) não é sobrescrito: o servidor guarda ele
   como `world.outro-mapa-<hora>.json` e começa um mundo novo (`WorldSim.save_mismatch`).

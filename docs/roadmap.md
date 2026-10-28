@@ -50,7 +50,12 @@ Extras (pedidos do Tux):
 
 ## v0.4: reprodução
 
-- Parceiro (bot ou jogador, R), ninho, ovos, filhotes; comer ovos de outros ninhos.
+- ✅ Reprodução (R, design seção 8): ninho segurando **N** (adulto, alimentado, sem sangrar,
+  parado 8 s em chão firme), parceiro com **R** (bot aceita ou recusa; jogador tem 15 s pra
+  confirmar), postura de 2 a 4 ovos por espécie, recarga de 2 h, incubação de 20 min de mundo.
+  Um ovo fica pronto pro dono ("Nascer no ninho" na tela de morte, como filhote); os outros
+  viram bots filhotes (até 100 bots). Carnívoro come ovo (jogador e bot com fome); 25% das
+  reposições de bot viram ninho de bot. Ninhos no save (formato 5); `/nest`, `/eggs`, `/hatch` (dev).
 
 ## v0.5: clima e estações
 

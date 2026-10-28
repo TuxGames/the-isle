@@ -50,7 +50,7 @@ trocar o valor ali.
 | Carnívoros também se atacam entre si | ✅ (carnívoro com fome ataca carnívoro menor; canibalismo só morrendo de fome) |
 | **Hitbox plausível**: só toma dano se a mordida realmente acertar | ✅ |
 | A maioria dos bots fica congelada (longe dos jogadores) | ✅ (ver seção 5). No mapa de 2 km com 70 bots e o diretor de população: 16 a 37 congelados, conforme os jogadores estão espalhados ou juntos (`--bench`) |
-| **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 |
+| **Bot morreu → obrigatoriamente entra outro** (não precisa ser da mesma espécie) | ✅ entra 30 s depois, fora da vista dos jogadores, mantendo os 65/35 (v0.4: 1 em cada 4 reposições vira um ninho de bot, cujos ovos chocam como filhotes; ver seção 8) |
 | Jogadores juntos → concentra bots perto deles; separados → espalha, sempre com população considerável perto de cada um | ✅ diretor de população: cada grupo de jogadores (a até 200 m um do outro) quer 60% da população dividida pelo número de grupos, na área de 260 m em volta. Age na reposição e mudando de lugar bots congelados que ninguém vê. (R) números em `config.gd` (seção "Diretor de população") |
 | Jogadores carnívoros com fome → mais herbívoros na área; herbívoro demais → mais carnívoros | ✅ "com fome" = fome abaixo de 50; "herbívoro demais" = mais de 80% da área. A proporção geral só sai 10% dos 65/35. (R) números em `config.gd` |
 
@@ -106,10 +106,32 @@ No HUD: "Sangrando 2:10 · Osso quebrado 8:40".
 
 | Decisão | Status |
 |---|---|
-| Nascer, crescer, reproduzir e morrer. **Reprodução é obrigatória** | 🟡 crescer e morrer ✅; reprodução ⬜ |
-| Encontrar parceiro e construir ninho | ⬜ |
-| (R) O parceiro pode ser bot ou jogador (com 5 jogadores, exigir parceiro jogador travaria algo que é obrigatório) | ⬜ v0.4 |
-| Dá pra comer ovos de outros ninhos e filhotes | 🟡 filhotes podem ser caçados; ovos ⬜ |
+| Nascer, crescer, reproduzir e morrer. **Reprodução é obrigatória** | ✅ v0.4 (ver a interpretação (R) abaixo) |
+| (R) "Obrigatória" = faz parte do ciclo de vida de todo dino, bot ou jogador: os bots se reproduzem sozinhos e o jogador ganha uma vantagem ao reproduzir (renascer filhote no próprio ninho). **Não tem punição** pra quem não reproduz | ✅ |
+| Encontrar parceiro e construir ninho | ✅ tecla **N** (ninho) e **R** (parceiro) |
+| (R) O parceiro pode ser bot ou jogador (com 5 jogadores, exigir parceiro jogador travaria algo que é obrigatório) | ✅ bot aceita ou recusa na hora; jogador tem 15 s pra apertar R de volta |
+| Dá pra comer ovos de outros ninhos e filhotes | ✅ qualquer carnívoro (jogador segurando E, bot com fome que passa perto); herbívoro não. Ninho de dono offline pode ser saqueado |
+| (R) Bots também se reproduzem: 25% das reposições de bot viram um ninho de bot com ovos, fora da vista dos jogadores (é o que dá ovo pros carnívoros comerem) | ✅ `BOT_NEST_SHARE` |
+| (R) Parte dos bots já nasce adulta (~31%, antes quase nenhum), pra ter parceiro bot por perto | ✅ `BOT_SPAWN_GROWTH_MAX` |
+
+Reprodução da v0.4 (R), números em `scripts/config.gd` (seção "Reprodução") e `clutch`/`egg_kg` em
+`species.gd`. Todo tempo é tempo de mundo: com ninguém online nada choca nem anda.
+
+| Etapa | Regra |
+|---|---|
+| Quem pode | adulto (o mesmo "adulto" do HUD), comida e água a partir de 50%, sem sangramento |
+| Ninho | segurar **N** parado por 8 s, em terra firme (fora d'água) e sem ladeira forte (até ~19°). Um ninho por jogador; fazer outro abandona o antigo (não dá com ovos chocando). Fica no save |
+| Parceiro | com o ninho pronto, chegar perto (4 m além dos dois corpos) de um adulto da **mesma espécie**, estando a até 40 m do próprio ninho, e apertar **R**. Bot aceita se estiver alimentado (50%), sem fugir/brigar/caçar e sem recarga. Jogador recebe o aviso na tela e tem 15 s pra apertar R |
+| Postura | os ovos aparecem no ninho de quem pediu: Dryosaurus 4, Carnotaurus 3, Triceratops 2. Recarga de 2 h entre posturas (o bot parceiro também fica 2 h sem aceitar) |
+| Incubação | 20 min de mundo |
+| Choco | um ovo fica pronto pro dono: se ele morrer, a tela de morte mostra **"Nascer no ninho"** e ele recomeça filhote ali (continua valendo "morreu → recomeça jovem"). Os outros viram bots filhotes, até o máximo de 100 bots (cheio, o ovo espera). O ovo pronto fica esperando o dono até ser usado ou comido |
+| Comer ovo | carnívoro segurando E com a boca no ovo por 3 s; dá comida (`egg_kg`: Dryosaurus 3 kg, Carnotaurus 6 kg, Triceratops 10 kg; enche um filhote, pouco pra um adulto). Bot carnívoro com fome sente ovo a até 25 m. O dono recebe o aviso |
+| Ninho de bot | uma reposição de bot em cada 4 vira ninho com os ovos da espécie que a reposição escolheria, onde o diretor de população poria o bot. Enquanto tem ovo, o ninho vale um bot na conta da reposição. Só acontece com jogador no mundo |
+| Fim | o ninho some quando acabam os ovos |
+
+HUD: "Ninho: 3 ovos · chocam em 12:30", a recarga da postura ("Nova postura em 1:42:10") e o aviso
+"Fulano quer fazer ninho com você · aperte R (12 s)". O ninho aparece como um anel marrom com os
+ovos (o ovo pronto pro dono é dourado).
 
 ## 9. Progressão do jogador
 

@@ -37,11 +37,23 @@ CONTROLES
   C ........... deitar pra descansar (cura e recupera fôlego mais rápido)
   F ........... faro: mostra em amarelo, por alguns segundos, as pegadas de quem passou
                 por perto nos últimos 2 minutos e as carcaças com carne (recarga de 30 s)
+  N (segurar) . fazer ninho: adulto, com comida e água acima da metade, sem sangrar,
+                parado por 8 s em chão firme e plano. Um ninho por jogador.
+  R ........... chamar pra postura: perto de um adulto da sua espécie (bot ou amigo) e
+                a até 40 m do seu ninho. Bot aceita na hora se estiver bem; o amigo tem
+                15 s pra apertar R também. Os ovos chocam em 20 min (2 h entre posturas).
   Enter ....... chat. Começando com / vira comando de teste:
                 /grow 1 (vira adulto), /spawn triceratops 1, /tp 200 300,
-                /hp 50, /food 100 100, /kill, /bots
+                /hp 50, /food 100 100, /kill, /bots,
+                /nest (ninho na hora), /eggs 4 (ovos no ninho), /hatch (choca agora)
   F1 .......... esconde/mostra a ajuda
   Esc ......... menu (configurações / sair do servidor / fechar o jogo)
+
+NINHO E OVOS
+  Os ovos chocam em 20 minutos de jogo (com o servidor vazio nada anda). Um ovo fica
+  pronto pra você: se morrer, aparece o botão "Nascer no ninho" e você recomeça como
+  filhote ali. Os outros viram filhotes do jogo. Cuidado: carnívoro come ovo (segurando E
+  perto do ninho), e o ninho continua no mundo mesmo com você fora do jogo.
 
 CONFIGURAÇÕES (no menu inicial ou no Esc)
   Vídeo: tela cheia, VSync, limite de FPS, distância de visão, sombras, campo de visão.
