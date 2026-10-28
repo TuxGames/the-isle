@@ -370,6 +370,9 @@ func _on_self_stats(st: PackedFloat32Array) -> void:
 			f |= Net.SF_EAT
 		if st[Net.ST_HEALTH] / maxf(st[Net.ST_MAX_HEALTH], 0.001) < Movement.LIMP_HEALTH:
 			f |= Net.SF_LIMP
+		# Osso quebrado também manca (a velocidade já vem limitada em ST_WALK/ST_SPRINT).
+		if st.size() > Net.ST_FRACTURE and st[Net.ST_FRACTURE] > 0.0:
+			f |= Net.SF_LIMP
 		my_view.flags = f
 
 

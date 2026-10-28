@@ -5,9 +5,11 @@ extends Node
 ## Papéis (--role=):
 ##   alice       carnívoro: vira adulto, erra um golpe de costas, acerta o bob de frente,
 ##               confere que o bob some quando sai, fica jogando mais um pouco e sai.
-##   bob         dryosaurus novo: confere que nasce jovem, espera ser mordido, grava o
+##   bob         dryosaurus novo: confere que nasce jovem, espera ser mordido (fica sangrando,
+##               com osso quebrado e mordida funda), para o sangramento (/hurt), grava o
 ##               próprio estado em --out e sai.
-##   bob_return  entra de novo como bob e confere que voltou EXATAMENTE igual (--expect).
+##   bob_return  entra de novo como bob e confere que voltou EXATAMENTE igual (--expect),
+##               com os ferimentos congelados.
 ##   bob_die     entra, morre (/kill) e confere que renasce jovem.
 ##   map_check   entra como carla e confere que o mapa tem o tamanho de --expect-map-size
 ##               e que o servidor a colocou no chão desse mesmo terreno.
@@ -298,6 +300,10 @@ func _alice() -> void:
 	if hit:
 		var e: Array = _hits_by(my_id)[0]
 		_check(e[2] == bob_id and e[3] > 0.0, "dano registrado no bob (%.1f, parte: %s)" % [e[3], e[4]])
+		# Carnotauro adulto (1.500 kg) quebra o osso de um dryosaurus (90 kg): os outros veem ele
+		# mancar mesmo com a vida acima do limite de mancar.
+		var limp := await _wait_for(func(): return entities.has(bob_id) and (int(entities[bob_id][2]) & Net.SF_LIMP) != 0, 2.0)
+		_check(limp, "bob manca de osso quebrado (visto pela alice)")
 
 	# Bob sai depois de ser mordido: o dino dele tem que sumir do mundo.
 	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0 + GameConfig.COMBAT_LOGOUT_S)
@@ -323,17 +329,32 @@ func _bob() -> void:
 	var hp0: float = stats[Net.ST_HEALTH]
 	var bitten := await _wait_for(func(): return stats[Net.ST_HEALTH] < hp0 - 0.01, 40.0)
 	_check(bitten, "levou a mordida (vida %.1f → %.1f)" % [hp0, stats[Net.ST_HEALTH]])
+	# Ferimentos da mordida (Injuries.from_hit): a mordida tira mais da metade da vida dele.
+	var hurt := await _wait_for(func(): return stats[Net.ST_BLEED] > 0.0 and stats[Net.ST_FRACTURE] > 0.0 \
+			and stats[Net.ST_DEEP] > 0.0, 2.0)
+	_check(hurt, "ficou sangrando, com osso quebrado e mordida funda (%.0f / %.0f / %.0f s)" % [
+			stats[Net.ST_BLEED], stats[Net.ST_FRACTURE], stats[Net.ST_DEEP]])
+	_check(stats[Net.ST_SPRINT] <= stats[Net.ST_WALK] + 0.001,
+			"osso quebrado não corre (andar %.2f, correr %.2f)" % [stats[Net.ST_WALK], stats[Net.ST_SPRINT]])
+	var hp_bleed: float = stats[Net.ST_HEALTH]
+	await _wait(1.0)
+	_check(stats[Net.ST_HEALTH] < hp_bleed - 0.01, "sangrando perde vida (%.2f → %.2f)" % [hp_bleed, stats[Net.ST_HEALTH]])
 	# Espera passar o tempo de briga: quem sai logo depois de apanhar deixa o dino mais um pouco
 	# no mundo (test_world cobre isso). Aqui o bob tem que voltar exatamente igual.
 	await _wait(GameConfig.COMBAT_LOGOUT_S + 0.5)
 	# Fome e sede em 20%: não cura nem passa fome rápido, então a vida fica parada
 	# e dá pra comparar com precisão quando ele voltar.
+	# O sangramento também tiraria vida; para ele com o comando de dev. A fratura e a mordida
+	# funda continuam e têm que voltar congeladas.
+	_dev("/hurt sangramento 0")
 	_dev("/food 20 20")
 	await _wait(0.6)
+	_check(stats[Net.ST_BLEED] == 0.0 and stats[Net.ST_FRACTURE] > 0.0, "/hurt parou só o sangramento")
 	var snap := {
 		"health": stats[Net.ST_HEALTH], "hunger": stats[Net.ST_HUNGER],
 		"thirst": stats[Net.ST_THIRST], "growth": stats[Net.ST_GROWTH],
 		"stamina": stats[Net.ST_STAMINA], "x": my_pos.x, "z": my_pos.z,
+		"fracture": stats[Net.ST_FRACTURE], "deep": stats[Net.ST_DEEP],
 	}
 	var f := FileAccess.open(String(args.get("out", "user://bob_state.json")), FileAccess.WRITE)
 	f.store_string(JSON.stringify(snap))
@@ -355,6 +376,14 @@ func _bob_return() -> void:
 	_check(absf(stats[Net.ST_THIRST] - float(expect["thirst"])) < eps, "sede igual (%.3f vs %.3f)" % [stats[Net.ST_THIRST], expect["thirst"]])
 	_check(absf(stats[Net.ST_GROWTH] - float(expect["growth"])) < 0.001, "crescimento igual (%.4f vs %.4f)" % [stats[Net.ST_GROWTH], expect["growth"]])
 	_check(Vector2(my_pos.x - float(expect["x"]), my_pos.z - float(expect["z"])).length() < 0.5, "mesma posição")
+	# Ferimentos: só andam com o bob online. Entre gravar e voltar ele fica online menos de 1 s
+	# no total (a fome, com eps 0,05, já garante isso), então o tempo que falta caiu no máximo
+	# esse tanto e nunca subiu.
+	for key in [["fracture", Net.ST_FRACTURE, "osso quebrado"], ["deep", Net.ST_DEEP, "mordida funda"]]:
+		var want := float(expect[key[0]])
+		var got: float = stats[key[1]]
+		_check(got <= want + 0.001 and got > want - 1.0, "%s congelado (%.2f s vs %.2f s)" % [key[2], got, want])
+	_check(stats[Net.ST_BLEED] == 0.0, "sem sangramento (parou antes de sair)")
 	_finish()
 
 

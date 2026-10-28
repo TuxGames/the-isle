@@ -29,9 +29,16 @@ static func speeds(d: Dino) -> Vector2:
 	var mult := lerpf(0.85, 1.0, d.growth)
 	if d.health_ratio() < LIMP_HEALTH:
 		mult *= LIMP_SPEED_MULT
-	if d.stamina <= 0.0:
+	# Fratura: anda mais devagar e não corre (Injuries).
+	mult *= Injuries.speed_mult(d)
+	if d.stamina <= 0.0 or not Injuries.can_sprint(d):
 		sprint = walk
 	return Vector2(walk * mult, sprint * mult)
+
+
+## Manca (animação e velocidade menor): vida baixa ou osso quebrado.
+static func is_limping(d: Dino) -> bool:
+	return d.health_ratio() < LIMP_HEALTH or Injuries.has(d, Injuries.FRACTURE)
 
 
 static func turn_rate_rad(species_id: String) -> float:

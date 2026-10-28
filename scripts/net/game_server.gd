@@ -474,6 +474,20 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				d.hunger = clampf(float(parts[1]) if parts.size() > 1 else 100.0, 0.0, 100.0)
 				d.thirst = clampf(float(parts[2]) if parts.size() > 2 else d.hunger, 0.0, 100.0)
 				reply = "Fome %.0f / sede %.0f" % [d.hunger, d.thirst]
+			"/hurt":
+				# /hurt sangramento|fratura|funda|nada [segundos]; 0 segundos cura aquele.
+				var kind := parts[1].to_lower() if parts.size() > 1 else ""
+				var types := {"sangramento": Injuries.BLEED, "fratura": Injuries.FRACTURE, "funda": Injuries.DEEP}
+				if kind == "nada":
+					d.injuries.clear()
+					reply = "Ferimentos curados"
+				elif types.has(kind):
+					var defaults := {"sangramento": GameConfig.BLEED_S, "fratura": GameConfig.FRACTURE_S, "funda": GameConfig.DEEP_S}
+					var secs := float(parts[2]) if parts.size() > 2 else float(defaults[kind])
+					Injuries.set_remaining(d, types[kind], secs)
+					reply = "Ferimentos: " + (Injuries.describe(d.injuries) if not d.injuries.is_empty() else "nenhum")
+				else:
+					reply = "Uso: /hurt sangramento|fratura|funda|nada [segundos]"
 			"/kill":
 				d.health = 0.0
 				d.last_attacker_id = 0
@@ -496,7 +510,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 					b.yaw = d.yaw + PI
 					reply = "%s criado na sua frente" % Species.display_name(sp_id)
 			_:
-				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /kill, /bots, /spawn especie [crescimento]"
+				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /hurt tipo [s], /kill, /bots, /spawn especie [crescimento]"
 	if reply != "":
 		Net.s_message.rpc_id(peer_id, reply)
 
@@ -543,7 +557,7 @@ static func build_snapshot(world: WorldSim) -> PackedFloat32Array:
 	var i := 0
 	for d in world.dinos.values():
 		var flags := 0
-		if d.sprinting and d.moving_speed > Metabolism.MOVING_EPS:
+		if d.sprinting and d.moving_speed > Metabolism.MOVING_EPS and Injuries.can_sprint(d):
 			flags |= Net.SF_SPRINT
 		if d.moving_speed > Metabolism.MOVING_EPS:
 			flags |= Net.SF_MOVING
@@ -553,7 +567,7 @@ static func build_snapshot(world: WorldSim) -> PackedFloat32Array:
 			flags |= Net.SF_EAT
 		if not d.is_bot:
 			flags |= Net.SF_PLAYER
-		if d.health_ratio() < Movement.LIMP_HEALTH:
+		if Movement.is_limping(d):
 			flags |= Net.SF_LIMP
 		if Movement.is_swimming(world.terrain, d.pos.x, d.pos.z, d.body_height()):
 			flags |= Net.SF_SWIM
@@ -603,6 +617,9 @@ func _send_self_stats() -> void:
 		st[Net.ST_RESTING] = 1.0 if d.resting else 0.0
 		st[Net.ST_WORLD_TIME] = sim.world_time
 		st[Net.ST_GROWTH_BOOST] = d.growth_boost_s
+		st[Net.ST_BLEED] = Injuries.remaining(d, Injuries.BLEED)
+		st[Net.ST_FRACTURE] = Injuries.remaining(d, Injuries.FRACTURE)
+		st[Net.ST_DEEP] = Injuries.remaining(d, Injuries.DEEP)
 		Net.s_self_stats.rpc_id(pid, st)
 
 
