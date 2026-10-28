@@ -7,7 +7,8 @@ extends RefCounted
 ## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
 ## 3: os dinos têm growth_boost_s (save antigo sem o campo vale 0).
 ## 4: os dinos têm "injuries" (save antigo = sem ferimentos).
-const SAVE_FORMAT := 4
+## 5: "nests" (ninhos, ovos e recarga da postura; save antigo = sem ninhos).
+const SAVE_FORMAT := 5
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -46,6 +47,8 @@ var director := PopulationDirector.new()
 var scent := ScentTrail.new()
 ## Quando cada jogador pode farejar de novo (nome -> world_time).
 var _sniff_ready := {}
+## Ninhos, ovos e parceiro (design, seção 8; ver sim/nests.gd).
+var nests := Nests.new()
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -263,6 +266,7 @@ func step(dt: float) -> void:
 	_update_carcasses(dt)
 	_regrow_bushes(dt)
 	_process_respawns()
+	nests.step(self, dt)
 	director.update(self, dt)
 	_finish_lingering()
 	scent.record(self)
@@ -316,10 +320,14 @@ func _interact(d: Dino, dt: float) -> void:
 	var want_eat := false
 	var carcass := {}
 	var bush := -1
+	var egg := {}
 	if d.hunger < 99.5:
 		if d.is_carnivore():
 			carcass = carcass_in_reach(d)
-			want_eat = not carcass.is_empty()
+			# Sem carcaça na boca, ovo (Nests): só carnívoro come ovo.
+			if carcass.is_empty():
+				egg = nests.egg_in_reach(self, d)
+			want_eat = not carcass.is_empty() or not egg.is_empty()
 		else:
 			bush = bush_in_reach(d)
 			want_eat = bush != -1
@@ -327,7 +335,9 @@ func _interact(d: Dino, dt: float) -> void:
 		Metabolism.drink(d, dt)
 		result = 2
 	elif want_eat:
-		if d.is_carnivore():
+		if not egg.is_empty():
+			nests.eat_egg(self, d, egg, dt)
+		elif d.is_carnivore():
 			carcass["meat"] -= Metabolism.eat(d, carcass["meat"], dt)
 		else:
 			bush_food[bush] -= Metabolism.eat(d, bush_food[bush], dt)
@@ -475,7 +485,8 @@ func spawn_bot(species_id: String = "", growth: float = -1.0) -> Dino:
 	if species_id == "":
 		species_id = choose_bot_species(String(plan.get("need", "")))
 	if growth < 0.0:
-		growth = rng.randf_range(0.45, 1.0)
+		# Parte já nasce adulta (pode ser parceiro na reprodução): ver BOT_SPAWN_GROWTH_MAX.
+		growth = minf(1.0, rng.randf_range(GameConfig.BOT_SPAWN_GROWTH_MIN, GameConfig.BOT_SPAWN_GROWTH_MAX))
 	var pos: Vector3 = plan["pos"] if plan.has("pos") else _bot_spawn_point()
 	var d := Dino.create(new_id(), species_id, growth, pos)
 	d.is_bot = true
@@ -499,14 +510,15 @@ func _process_respawns() -> void:
 	var still := []
 	for due in respawn_queue:
 		if world_time >= due:
-			if bot_count() < bot_target:
+			# Ninho de bot com ovos vale um bot; parte das reposições vira ninho (Nests).
+			if bot_count() + nests.bot_slots() < bot_target and not nests.try_bot_nest(self):
 				spawn_bot()
 		else:
 			still.append(due)
 	respawn_queue = still
 	# Garante a reposição mesmo se a fila se perder (ex.: save antigo).
-	if respawn_queue.is_empty() and bot_count() < bot_target:
-		var missing := bot_target - bot_count()
+	if respawn_queue.is_empty() and bot_count() + nests.bot_slots() < bot_target:
+		var missing := bot_target - bot_count() - nests.bot_slots()
 		for i in missing:
 			respawn_queue.append(world_time + GameConfig.BOT_RESPAWN_DELAY_S)
 
@@ -724,6 +736,7 @@ func to_save() -> Dictionary:
 		"next_id": next_id,
 		"bots": bot_list,
 		"carcasses": carc,
+		"nests": nests.to_save(),
 		"bush_food": Array(bush_food),
 		"players": player_records.duplicate(true),
 		"respawn_queue": respawn_queue.duplicate(),
@@ -749,6 +762,7 @@ func save_mismatch(data: Dictionary) -> String:
 ## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 ## Formato 2 lê igual: os dinos só não tinham "growth_boost_s" (Dino.from_dict usa 0).
 ## Formato 3 lê igual: os dinos só não tinham "injuries" (Dino.from_dict deixa sem ferimentos).
+## Formato 4 lê igual: só não tinha "nests" (Nests.load_save deixa o mundo sem ninhos).
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))
@@ -768,6 +782,8 @@ func load_save(data: Dictionary) -> void:
 		cc["id"] = int(cc["id"])
 		carcasses[cc["id"]] = cc
 		next_id = maxi(next_id, cc["id"] + 1)
+	# Formato 4 e antes não tinham ninhos: o mundo carrega sem nenhum (os dinos vêm iguais).
+	nests.load_save(self, data.get("nests", {}))
 	var bf: Array = data.get("bush_food", [])
 	if bf.size() == bush_food.size():
 		for i in bf.size():

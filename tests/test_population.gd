@@ -192,7 +192,9 @@ func test_reposicao_continua_com_diretor(t) -> void:
 				known[b.id] = true
 				t.check(_min_player_dist(w, b.pos) >= WorldSim.BOT_SPAWN_MIN_PLAYER_DIST,
 						"bot reposto nasceu fora da vista")
-	t.check(w.bot_count() == 20, "os 5 mortos foram repostos (%d)" % w.bot_count())
+	# Parte das reposições vira ninho de bot (Nests): o ninho com ovos vale um bot.
+	t.check(w.bot_count() + w.nests.bot_slots() == 20, "os 5 mortos foram repostos (%d bots + %d ninhos)" % [
+			w.bot_count(), w.nests.bot_slots()])
 
 
 ## Sem jogador o diretor não faz nada e nem sorteia: o mundo dos testes de carga não muda.

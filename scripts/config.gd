@@ -95,6 +95,42 @@ const SNIFF_COOLDOWN_S := 30.0
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1
 
+## Reprodução (design, seção 8; ver sim/nests.gd). (R) recomendação aprovada pelo Marcelo:
+## ajuste aqui. Tempos em segundos de mundo (param com o mundo parado, como todo o resto).
+## Ovos por postura (`clutch`) e comida de cada ovo (`egg_kg`) ficam em species.gd.
+## Quem pode fazer ninho e postura: adulto (crescimento a partir de ADULT_GROWTH, o mesmo
+## "adulto" do HUD), comida e água a partir de REPRO_MIN_FOOD e sem sangramento.
+const ADULT_GROWTH := 1.0
+const REPRO_MIN_FOOD := 50.0
+## Ninho: segurar N parado esse tempo, em terra firme e sem ladeira mais forte que NEST_MAX_SLOPE
+## (tangente: 0,35 ≈ 19 graus). Um por jogador; fazer outro abandona o antigo (menos com ovos chocando).
+const NEST_BUILD_S := 8.0
+const NEST_MAX_SLOPE := 0.35
+## Parceiro (bot ou jogador adulto da mesma espécie): a até MATE_RANGE_M além dos dois corpos,
+## com quem pede a até MATE_NEST_DIST do próprio ninho. Jogador tem MATE_CONFIRM_S pra apertar R.
+const MATE_RANGE_M := 4.0
+const MATE_NEST_DIST := 40.0
+const MATE_CONFIRM_S := 15.0
+## Recarga entre duas posturas do mesmo jogador (2 h de mundo). O bot que serviu de parceiro
+## fica esse mesmo tempo sem aceitar de novo.
+const LAY_COOLDOWN_S := 7200.0
+## Incubação: 20 min de mundo.
+const INCUBATION_S := 1200.0
+## Crescimento do bot filhote que sai do ovo. O jogador que nasce no ninho usa
+## PLAYER_START_GROWTH (morreu → recomeça jovem, como em qualquer renascimento).
+const HATCHLING_GROWTH := PLAYER_START_GROWTH
+## Comer ovo (só carnívoro): segurar E esse tempo com a boca no ovo. Bot carnívoro com fome
+## sente ovo até EGG_BOT_SMELL_M.
+const EGG_EAT_S := 3.0
+const EGG_BOT_SMELL_M := 25.0
+## Parte das reposições de bot que vira um ninho de bot com ovos (fora da vista dos jogadores).
+## Os ovos chocam como bots filhotes. Enquanto tem ovo, o ninho vale um bot na conta da reposição.
+const BOT_NEST_SHARE := 0.25
+## Bot novo nasce com crescimento sorteado entre esses dois; o que passa de 1 vira adulto
+## (com 1,25: ~31% adultos). Antes era 0,45 a 1,0 (quase nenhum adulto pra ser parceiro).
+const BOT_SPAWN_GROWTH_MIN := 0.45
+const BOT_SPAWN_GROWTH_MAX := 1.25
+
 ## Códigos de resgate (recomendação aprovada pelo Marcelo, 28/10). Quem cria e revoga códigos,
 ## por nome de conta, sem diferença de maiúsculas. O servidor troca com --admins=Nome1,Nome2.
 const DEFAULT_ADMINS := ["Tux", "Marcelo"]

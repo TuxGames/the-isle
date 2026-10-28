@@ -2,7 +2,8 @@ class_name BotBrain
 extends RefCounted
 ## IA dos bots: uma máquina de estados simples que roda no servidor.
 ##
-## Estados: wander, idle, drink, eat, hunt, fight, flee, rest.
+## Estados: wander, idle, drink, eat, eat_egg (carnívoro com fome come ovo de ninho), hunt,
+## fight, flee, rest.
 ## Decisões do Marcelo implementadas aqui (docs/design.md, seção 4):
 ## - Ataca ou foge de acordo com o % de vida (pouca vida → foge).
 ## - Carnívoros também se atacam (carnívoro ataca carnívoro menor).
@@ -144,6 +145,8 @@ static func think(world: WorldSim, b: Dino) -> void:
 		return
 	if state == "eat" and b.hunger < SATISFIED and _food_still_there(world, b):
 		return
+	if state == "eat_egg" and b.hunger < SATISFIED and world.nests.has_egg(String(br.get("egg", ""))):
+		return
 	if state == "rest":
 		var rest_long := now - float(br.get("since", now))
 		if rest_long < 40.0 and (b.stamina < 80.0 or (hp < 0.7 and rest_long < 30.0)):
@@ -162,6 +165,12 @@ static func think(world: WorldSim, b: Dino) -> void:
 				_set_state(world, b, "eat")
 				br["food"] = int(carcass["id"])
 				br["dest"] = carcass["pos"]
+				return
+			# Ovo ali perto (Nests): comida fácil, vem antes de caçar.
+			var egg := world.nests.nearest_egg(b.pos, GameConfig.EGG_BOT_SMELL_M)
+			if not egg.is_empty():
+				_set_state(world, b, "eat_egg")
+				_aim_at_egg(b, egg)
 				return
 			if now >= float(br.get("hunt_cooldown_until", 0.0)) and b.stamina > 25.0:
 				var prey := _choose_prey(b, seen)
@@ -189,6 +198,17 @@ static func _food_still_there(world: WorldSim, b: Dino) -> bool:
 	if b.is_carnivore():
 		return world.carcasses.has(food) and float(world.carcasses[food]["meat"]) > 1.0
 	return food >= 0 and food < world.bush_food.size() and world.bush_food[food] > 1.0
+
+
+## Vai pra um ovo (Nests): o corpo para onde a boca fica em cima do ovo, do lado de onde vem.
+static func _aim_at_egg(b: Dino, egg: Dictionary) -> void:
+	var egg_pos: Vector3 = egg["pos"]
+	var head := float(b.spec()["attack_point"].z) * b.scale()
+	var away := Vector3(b.pos.x - egg_pos.x, 0.0, b.pos.z - egg_pos.z)
+	away = away.normalized() if away.length() > 0.01 else -b.forward()
+	b.brain["egg"] = egg["key"]
+	b.brain["egg_pos"] = egg_pos
+	b.brain["dest"] = egg_pos + away * head
 
 
 ## Melhor presa à vista: perto, fraca e que vale a pena. Carnívoro só ataca carnívoro menor.
@@ -256,6 +276,15 @@ static func _act(world: WorldSim, b: Dino, dt: float) -> void:
 			else:
 				var dest2: Vector3 = br.get("dest", b.pos)
 				_steer(world, b, dest2, speeds.x, dt, 0.0)
+		"eat_egg":
+			var egg_pos: Vector3 = br.get("egg_pos", b.pos)
+			if not world.nests.egg_in_reach(world, b).is_empty():
+				_stop(b)
+				b.interacting = true
+				_face(b, egg_pos, dt)
+			elif _steer(world, b, br.get("dest", egg_pos), speeds.x, dt, 0.3):
+				# Chegou com a boca longe do ovo: vira pra ele.
+				_face(b, egg_pos, dt)
 		"hunt", "fight":
 			var target: Dino = world.get_dino(int(br.get("target_id", 0)))
 			if target == null:
