@@ -34,8 +34,8 @@ Extras (pedidos do Tux):
 - ✅ Tela de configurações (menu e Esc): vídeo (tela cheia, VSync, limite de FPS, distância de
   visão, sombras, campo de visão), controles (sensibilidade, inverter vertical), interface (ajuda
   na tela) e Conta (trocar senha, esquecer a senha lembrada). Fica no PC do jogador.
-- Códigos de resgate com painel de admin (Tux e Marcelo): esperando o Marcelo dizer o que um
-  código pode dar.
+- ✅ Códigos de resgate (R) com painel de admin (Tux e Marcelo): boost de crescimento, acesso
+  beta e liberar espécie. Sem level e sem virar adulto na hora (design, seção 12).
 
 ## v0.3: ferimentos e rastro
 

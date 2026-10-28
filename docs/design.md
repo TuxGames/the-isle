@@ -122,6 +122,21 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 | Seca: rio pequeno seca, rio gigante só diminui | ⬜ |
 | Morte por raio **só para bots**, nunca para jogadores | ⬜ |
 
+## 12. Códigos de resgate (R)
+
+Ideia do Tux (24/10). As recompensas são recomendação aprovada pelo Marcelo (28/10); tudo fica em
+`scripts/sim/rewards.gd` e `config.gd`, pra mudar fácil.
+
+| Decisão | Status |
+|---|---|
+| Admins (criam e cancelam códigos no jogo): **Tux e Marcelo**, por nome de conta (`DEFAULT_ADMINS`; o servidor troca com `--admins=Nome1,Nome2`) | ✅ aba Admin das configurações, só aparece pra admin; o servidor confere tudo |
+| O jogador resgata na aba **Conta**; cada conta usa um mesmo código uma vez só | ✅ |
+| Código: `DINO-XXXX-XXXX`, sem 0/O/1/I; escolhe quantas pessoas podem usar e por quantos dias vale | ✅ 5 códigos errados num minuto bloqueiam a conta por 1 minuto |
+| **Boost de crescimento**: +50% de velocidade por 60 min (o admin escolhe de 5 a 600 min); só gasta enquanto o dino cresce, não se perde ao sair nem ao morrer | ✅ |
+| **Acesso beta**: libera as espécies marcadas `beta` | ✅ (hoje nenhuma espécie é beta) |
+| **Liberar espécie**: libera uma espécie marcada `locked` | ✅ (hoje nenhuma é trancada) |
+| **Não existe** recompensa de "level" nem de virar adulto na hora: chegar no adulto é a parte difícil (seção 9) e quem morre recomeça jovem | ✅ |
+
 ---
 
 ## Decisões de engenharia (Tux + Claude)
@@ -164,10 +179,6 @@ Status de cada item (situação na **v0.1**): ✅ implementado e testado · 🟡
 
 ## Em aberto (perguntar ao Marcelo)
 
-- **Códigos de resgate** (ideia do Tux, 24/10): o admin cria códigos no jogo e o jogador resgata na
-  aba Conta. O que um código pode dar (crescimento? espécie? acesso antecipado?) esbarra em
-  "morreu → recomeça jovem", então o Tux vai decidir com o Marcelo. Já decidido: admins são o
-  Tux e o Marcelo.
 
 As perguntas abaixo estão num questionário pro Marcelo responder (página privada do Tux no
 claude.ai: https://claude.ai/artifact/PYs4dFwZ2Lbkp6Cv7x14Q7). As respostas ficam no banco da

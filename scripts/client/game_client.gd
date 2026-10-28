@@ -71,6 +71,19 @@ func start(args: Dictionary) -> void:
 	hud.settings_panel.change_password_requested.connect(_change_password)
 	hud.settings_panel.forget_password_requested.connect(func(): hud.forget_key())
 	Net.password_changed.connect(_on_password_changed)
+	# Códigos de resgate (aba Conta) e painel de admin (aba Admin). Quem confere tudo é o servidor.
+	hud.settings_panel.redeem_requested.connect(_redeem_code)
+	hud.settings_panel.create_code_requested.connect(func(reward, param, uses, days):
+		if _my_name != "":
+			Net.c_staff_create_code.rpc_id(1, reward, param, uses, days))
+	hud.settings_panel.list_codes_requested.connect(func():
+		if _my_name != "":
+			Net.c_staff_list_codes.rpc_id(1))
+	hud.settings_panel.revoke_code_requested.connect(func(code):
+		if _my_name != "":
+			Net.c_staff_revoke_code.rpc_id(1, code))
+	Net.redeem_result.connect(func(ok, text, perks): hud.settings_panel.show_redeem_result(ok, text, perks))
+	Net.staff_codes.connect(func(list, created, text): hud.settings_panel.show_staff_codes(list, created, text))
 
 	Net.welcome_received.connect(_on_welcome)
 	Net.login_failed.connect(_on_login_failed)
@@ -240,6 +253,9 @@ func _clear_world() -> void:
 	stats = PackedFloat32Array()
 	_my_name = ""
 	hud.set_account("")
+	hud.settings_panel.set_admin(false)
+	hud.settings_panel.set_perks({})
+	hud.settings_panel.set_boost(0.0)
 
 
 # ---------------------------------------------------------------- mensagens do servidor
@@ -269,6 +285,14 @@ func _on_welcome(info: Dictionary) -> void:
 	stats = PackedFloat32Array()
 	_my_name = String(info.get("name", _pending_login.get("name", "")))
 	hud.set_account(_my_name)
+	hud.settings_panel.set_perks(info.get("perks", {}))
+	var admin := bool(info.get("admin", false))
+	hud.settings_panel.set_admin(admin)
+	if admin:
+		Net.c_staff_list_codes.rpc_id(1)
+	# --open-settings=Admin só funciona depois que o servidor diz quem é admin (prints).
+	if _args.has("open-settings"):
+		hud.open_settings(String(_args["open-settings"]))
 	hud.show_game()
 	hud.hide_death()
 	if bool(info.get("account_created", false)):
@@ -335,6 +359,8 @@ func _on_snapshot(data: PackedFloat32Array) -> void:
 func _on_self_stats(st: PackedFloat32Array) -> void:
 	stats = st
 	hud.set_stats(st, my_species)
+	if st.size() > Net.ST_GROWTH_BOOST:
+		hud.settings_panel.set_boost(st[Net.ST_GROWTH_BOOST])
 	if my_view:
 		my_view.set_growth(st[Net.ST_GROWTH])
 		var f := 0
@@ -457,6 +483,15 @@ func _change_password(old_password: String, new_password: String, repeat: String
 		_pending_new_key = Accounts.client_key(_my_name, new_password)
 		Net.c_set_password.rpc_id(1, Accounts.client_key(_my_name, old_password), _pending_new_key)
 		hud.settings_panel.set_password_status("Trocando...", false)
+
+
+func _redeem_code(code: String) -> void:
+	if _my_name == "":
+		hud.settings_panel.show_redeem_result(false, "Entre num servidor pra resgatar códigos.", {})
+	elif code == "":
+		hud.settings_panel.show_redeem_result(false, "Digite o código.", {})
+	else:
+		Net.c_redeem_code.rpc_id(1, code)
 
 
 func _on_password_changed(ok: bool, text: String) -> void:

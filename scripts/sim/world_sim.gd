@@ -5,7 +5,8 @@ extends RefCounted
 ## Isso permite testar toda a lógica do jogo sem abrir conexão.
 
 ## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
-const SAVE_FORMAT := 2
+## 3: os dinos têm growth_boost_s (save antigo sem o campo vale 0).
+const SAVE_FORMAT := 3
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -413,7 +414,9 @@ func kill(d: Dino, cause: String) -> void:
 	if d.is_bot:
 		respawn_queue.append(world_time + GameConfig.BOT_RESPAWN_DELAY_S)
 	else:
-		player_records[d.player_name] = {"alive": false, "dino": {"species": d.species}}
+		# O boost de crescimento (código) não se perde com a morte: vai pro próximo dino.
+		player_records[d.player_name] = {"alive": false,
+				"dino": {"species": d.species, "growth_boost_s": d.growth_boost_s}}
 	events.append({"type": Ev.DEATH, "a": d.id, "carcass": cid, "cause": cause,
 			"player": d.player_name if not d.is_bot else ""})
 
@@ -559,6 +562,7 @@ func respawn_player(player_name: String, species_choice: String) -> Dino:
 	var d := Dino.create(new_id(), species_choice, GameConfig.PLAYER_START_GROWTH, p)
 	d.is_bot = false
 	d.player_name = player_name
+	d.growth_boost_s = growth_boost_of(player_name)
 	d.yaw = rng.randf_range(-PI, PI)
 	d.pos.y = Movement.ground_y(terrain, p.x, p.z, d.body_height())
 	d.client_seq = 1
@@ -578,6 +582,30 @@ func logout_player(id: int) -> void:
 	player_records[d.player_name] = {"alive": true, "dino": d.to_dict()}
 	dinos.erase(id)
 	pending_attacks = pending_attacks.filter(func(pa): return pa["id"] != id)
+
+
+## Segundos de boost de crescimento que o jogador tem (online, offline ou morto).
+func growth_boost_of(player_name: String) -> float:
+	for d: Dino in dinos.values():
+		if not d.is_bot and d.player_name == player_name:
+			return d.growth_boost_s
+	var rec: Dictionary = player_records.get(player_name, {})
+	return float(Dictionary(rec.get("dino", {})).get("growth_boost_s", 0.0))
+
+
+## Soma boost de crescimento (código de resgate). Vale pro dino online, pro salvo de quem está
+## fora e pro próximo dino de quem está morto. Devolve o total.
+func add_growth_boost(player_name: String, seconds: float) -> float:
+	for d: Dino in dinos.values():
+		if not d.is_bot and d.player_name == player_name:
+			d.growth_boost_s += seconds
+			return d.growth_boost_s
+	if not player_records.has(player_name):
+		player_records[player_name] = {"alive": false, "dino": {}}
+	var dd: Dictionary = player_records[player_name].get("dino", {})
+	dd["growth_boost_s"] = float(dd.get("growth_boost_s", 0.0)) + seconds
+	player_records[player_name]["dino"] = dd
+	return float(dd["growth_boost_s"])
 
 
 ## Atualiza o registro salvo de todos os jogadores conectados (antes de salvar em disco).
@@ -633,6 +661,7 @@ func save_mismatch(data: Dictionary) -> String:
 
 ## Carrega um save. Jogadores ficam só nos registros (entram de novo quando conectam).
 ## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
+## Formato 2 lê igual: os dinos só não tinham "growth_boost_s" (Dino.from_dict usa 0).
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))

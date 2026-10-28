@@ -10,6 +10,8 @@ extends RefCounted
 ## - "attack_point": de onde sai o golpe (boca/chifre/pata). O golpe é um segmento
 ##   vertical que desce de attack_point até attack_point.y * (1 - attack_reach_down),
 ##   pra um bicho grande conseguir morder um pequeno no chão.
+## - Opcionais, pra códigos de resgate (Rewards): "locked": true = só escolhe quem liberou
+##   a espécie com um código; "beta": true = só escolhe conta com acesso beta. Hoje nenhuma é.
 
 enum Diet { CARNIVORE, HERBIVORE }
 
@@ -171,6 +173,30 @@ static func id_at(index: int) -> String:
 	if index < 0 or index >= IDS.size():
 		return IDS[0]
 	return IDS[index]
+
+
+static func is_locked(id: String) -> bool:
+	return bool(DATA.get(id, {}).get("locked", false))
+
+
+static func is_beta(id: String) -> bool:
+	return bool(DATA.get(id, {}).get("beta", false))
+
+
+## Se a conta pode escolher a espécie ("" = pode; senão o motivo, pro jogador ler).
+## `perks` = o que a conta ganhou com códigos ({"beta": bool, "species": [ids]}).
+static func choice_error(id: String, perks: Dictionary) -> String:
+	return choice_error_for(DATA.get(id, {}), id, perks)
+
+
+## Igual a choice_error, com os dados da espécie passados (dá pra testar com espécie de mentira).
+static func choice_error_for(spec: Dictionary, id: String, perks: Dictionary) -> String:
+	var shown := String(spec.get("name", id))
+	if bool(spec.get("beta", false)) and not bool(perks.get("beta", false)):
+		return "%s ainda está em teste: só quem tem acesso beta pode escolher." % shown
+	if bool(spec.get("locked", false)) and not Array(perks.get("species", [])).has(id):
+		return "%s ainda está trancado: precisa de um código pra liberar." % shown
+	return ""
 
 
 static func is_carnivore(id: String) -> bool:

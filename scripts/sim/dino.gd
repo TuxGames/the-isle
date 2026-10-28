@@ -38,6 +38,10 @@ var last_client_time: float = 0.0
 ## Memória da IA (só bots). Ver bot_brain.gd.
 var brain := {}
 
+## Boost de crescimento (código de resgate): segundos que ainda faltam. Só gasta enquanto o
+## dino cresce (Metabolism); vai junto quando o jogador sai e quando morre (WorldSim).
+var growth_boost_s: float = 0.0
+
 ## Simulação por distância (WorldSim.SimTier; não vai pro save, é recalculada todo passo).
 var sim_tier: int = 0
 ## Tempo de mundo acumulado desde a última vez que o dino foi simulado.
@@ -116,6 +120,7 @@ func to_dict() -> Dictionary:
 		"stamina": stamina,
 		"resting": resting,
 		"brain_state": String(brain.get("state", "")),
+		"growth_boost_s": growth_boost_s,
 	}
 
 
@@ -136,4 +141,5 @@ static func from_dict(d: Dictionary) -> Dino:
 	dino.thirst = float(d.get("thirst", 100.0))
 	dino.stamina = float(d.get("stamina", 100.0))
 	dino.resting = bool(d.get("resting", false))
+	dino.growth_boost_s = maxf(0.0, float(d.get("growth_boost_s", 0.0)))
 	return dino
