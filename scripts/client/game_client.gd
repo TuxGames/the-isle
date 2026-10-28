@@ -23,6 +23,10 @@ var terrain_view: TerrainView
 var camera: Camera3D
 ## Rastro do faro (tecla F).
 var scent_view: ScentView
+## Ninhos e ovos (s_nests) e se estou segurando N.
+var nest_view: NestView
+var _nest_list: Array = []
+var _holding_nest := false
 
 ## Outros dinos e carcaças: id -> DinoView
 var views := {}
@@ -102,6 +106,7 @@ func start(args: Dictionary) -> void:
 	Net.died.connect(_on_died)
 	Net.message_received.connect(func(t): hud.add_message(t))
 	Net.scent_received.connect(_on_scent)
+	Net.nests_received.connect(_on_nests)
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -115,6 +120,8 @@ func start(args: Dictionary) -> void:
 	camera.look_at(Vector3(256, 0, 256))
 	scent_view = ScentView.new()
 	add_child(scent_view)
+	nest_view = NestView.new()
+	add_child(nest_view)
 
 	hud.fill_menu(String(args.get("name", "")), String(args.get("connect", "")), String(args.get("species", "")))
 	if args.has("cam-yaw"):
@@ -147,7 +154,7 @@ func _setup_input() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"sprint": [KEY_SHIFT], "interact": [KEY_E], "rest": [KEY_C],
 		"chat": [KEY_ENTER, KEY_KP_ENTER], "menu": [KEY_ESCAPE], "help": [KEY_F1],
-		"sniff": [KEY_F],
+		"sniff": [KEY_F], "nest": [KEY_N], "mate": [KEY_R],
 	}
 	for action in keys:
 		if InputMap.has_action(action):
@@ -272,6 +279,12 @@ func _clear_world() -> void:
 	_my_name = ""
 	_sniff_ready_ms = 0
 	scent_view.clear()
+	nest_view.clear()
+	_nest_list = []
+	_holding_nest = false
+	hud.set_nest_ready(false)
+	hud.set_nest_status("")
+	hud.set_mate_request("")
 	hud.set_account("")
 	hud.settings_panel.set_admin(false)
 	hud.settings_panel.set_perks({})
@@ -292,6 +305,7 @@ func _on_welcome(info: Dictionary) -> void:
 		add_child(terrain_view)
 		terrain_view.set_view_distance(settings.view_distance)
 		terrain_view.set_shadows(settings.shadows)
+	_holding_nest = false
 	if my_view:
 		my_view.queue_free()
 	if views.has(my_id):
@@ -304,6 +318,7 @@ func _on_welcome(info: Dictionary) -> void:
 	in_game = true
 	stats = PackedFloat32Array()
 	_my_name = String(info.get("name", _pending_login.get("name", "")))
+	_draw_nests()
 	hud.set_account(_my_name)
 	hud.settings_panel.set_perks(info.get("perks", {}))
 	var admin := bool(info.get("admin", false))
@@ -396,6 +411,7 @@ func _on_self_stats(st: PackedFloat32Array) -> void:
 		if st.size() > Net.ST_FRACTURE and st[Net.ST_FRACTURE] > 0.0:
 			f |= Net.SF_LIMP
 		my_view.flags = f
+	_update_nest_hud(st)
 
 
 func _on_roster(r: Dictionary) -> void:
@@ -437,12 +453,37 @@ func _on_scent(ok: bool, data: PackedFloat32Array, cooldown: float) -> void:
 		hud.add_message("Nenhum cheiro por perto.")
 
 
+## Ninhos (s_nests): desenha todos; o meu decide o botão "Nascer no ninho" da tela de morte.
+func _on_nests(list: Array, mine: Dictionary) -> void:
+	_nest_list = list
+	_draw_nests()
+	hud.set_nest_ready(bool(mine.get("ready", false)), String(mine.get("species", "")))
+
+
+func _draw_nests() -> void:
+	if terrain:
+		nest_view.show_nests(_nest_list, terrain, _my_name)
+
+
+## Reprodução no HUD: ninho, recarga da postura e pedido de parceiro de outro jogador.
+func _update_nest_hud(st: PackedFloat32Array) -> void:
+	if st.size() < Net.ST_COUNT:
+		return
+	hud.set_nest_status(Nests.status_text(int(st[Net.ST_NEST_EGGS]), int(st[Net.ST_NEST_READY]),
+			st[Net.ST_NEST_HATCH], st[Net.ST_LAY_COOLDOWN]))
+	var ask: float = st[Net.ST_MATE_ASK]
+	var who := String(roster.get(str(int(st[Net.ST_MATE_FROM])), "Alguém"))
+	hud.set_mate_request("" if ask <= 0.0 else "%s quer fazer ninho com você · aperte R (%d s)" % [who, ceili(ask)])
+
+
 func _on_died(cause: String) -> void:
 	alive = false
 	interacting = false
+	_holding_nest = false
 	if my_view:
 		my_view.queue_free()
 		my_view = null
+	hud.set_mate_request("")
 	hud.show_death(cause)
 
 
@@ -488,6 +529,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		Net.c_action.rpc_id(1, Net.Action.REST_TOGGLE, "")
 	elif event.is_action_pressed("sniff") and alive:
 		_sniff()
+	elif event.is_action_pressed("mate") and alive:
+		Net.c_mate.rpc_id(1)
 	elif event.is_action_pressed("chat"):
 		hud.open_chat()
 		get_viewport().set_input_as_handled()
@@ -602,6 +645,11 @@ func _update_local(delta: float) -> void:
 	if want_interact != interacting:
 		interacting = want_interact
 		Net.c_action.rpc_id(1, Net.Action.INTERACT_START if interacting else Net.Action.INTERACT_STOP, "")
+	# Ninho: segurar N parado (quem conta o tempo e confere tudo é o servidor).
+	var want_nest := not blocked and Input.is_action_pressed("nest")
+	if want_nest != _holding_nest:
+		_holding_nest = want_nest
+		Net.c_nest.rpc_id(1, _holding_nest)
 
 	var input := Vector2.ZERO
 	if not blocked and not interacting:
@@ -688,6 +736,12 @@ func _line_clear(from: Vector3, to: Vector3) -> bool:
 func _prompt_text() -> String:
 	if not alive or stats.size() == 0:
 		return ""
+	if _holding_nest and stats.size() >= Net.ST_COUNT:
+		var built: float = stats[Net.ST_NEST_BUILD]
+		if built > 0.0:
+			return "Fazendo o ninho... %d%%" % floori(built * 100.0)
+		if built == 0.0:
+			return "Fique parado pra fazer o ninho"
 	var res := int(stats[Net.ST_INTERACT])
 	if interacting:
 		if res == 2:
@@ -709,9 +763,35 @@ func _prompt_text() -> String:
 				var cr := Species.length_m(v.species) * Species.scale_for(v.species, v.growth) * 0.5
 				if Movement.flat_distance(mouth, v.position) <= cr + reach:
 					return "[E] comer"
+		for egg in nest_view.egg_positions:
+			if Movement.flat_distance(mouth, egg) <= Nests.EGG_REACH_M + reach:
+				return "[E] comer ovo"
 	else:
 		if not terrain.bushes_near(mouth, Terrain.BUSH_RADIUS + reach).is_empty():
 			return "[E] comer"
+	return _mate_prompt()
+
+
+## "[R]" quando dá pra chamar alguém pra postura: ninho vazio perto, sem recarga, adulto e um
+## adulto da mesma espécie ao lado. Quem confere de verdade é o servidor.
+func _mate_prompt() -> String:
+	if stats.size() < Net.ST_COUNT or stats[Net.ST_LAY_COOLDOWN] > 0.0 \
+			or int(stats[Net.ST_NEST_EGGS]) - int(stats[Net.ST_NEST_READY]) != 0 \
+			or _growth() < GameConfig.ADULT_GROWTH:
+		return ""
+	var near_nest := false
+	for n in _nest_list:
+		if String(n.get("owner", "")) == _my_name and _my_name != "":
+			near_nest = Movement.flat_distance(my_pos, n["pos"]) <= GameConfig.MATE_NEST_DIST
+	if not near_nest:
+		return ""
+	var mine := Species.footprint_radius(my_species, _growth())
+	for v in views.values():
+		if v.is_dead or v.species != my_species or v.growth < GameConfig.ADULT_GROWTH:
+			continue
+		var reach: float = GameConfig.MATE_RANGE_M + mine + Species.footprint_radius(v.species, v.growth)
+		if Movement.flat_distance(my_pos, v.position) <= reach:
+			return "[R] chamar pra fazer ninho"
 	return ""
 
 
