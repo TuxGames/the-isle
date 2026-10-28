@@ -10,15 +10,18 @@ const LIMP_HEALTH := 0.25
 const LIMP_SPEED_MULT := 0.7
 
 
-## Altura em que os pés do dino ficam. Na água funda ele "boia".
-static func ground_y(terrain: Terrain, x: float, z: float, body_height: float) -> float:
+## Altura em que os pés do dino ficam. Na água funda ele "boia". `water_level`: nível do rio
+## agora (baixa na seca; ver Climate.water_level).
+static func ground_y(terrain: Terrain, x: float, z: float, body_height: float,
+		water_level: float = Terrain.WATER_LEVEL) -> float:
 	var h := terrain.height_at(x, z)
-	var float_y := Terrain.WATER_LEVEL - body_height * SWIM_DEPTH_FRACTION
+	var float_y := water_level - body_height * SWIM_DEPTH_FRACTION
 	return maxf(h, float_y)
 
 
-static func is_swimming(terrain: Terrain, x: float, z: float, body_height: float) -> bool:
-	return terrain.height_at(x, z) < Terrain.WATER_LEVEL - body_height * SWIM_DEPTH_FRACTION
+static func is_swimming(terrain: Terrain, x: float, z: float, body_height: float,
+		water_level: float = Terrain.WATER_LEVEL) -> bool:
+	return terrain.height_at(x, z) < water_level - body_height * SWIM_DEPTH_FRACTION
 
 
 ## Velocidades atuais [andar, correr] em m/s, sem contar a água (o cliente aplica).
@@ -33,6 +36,8 @@ static func speeds(d: Dino) -> Vector2:
 	mult *= Injuries.speed_mult(d)
 	if d.stamina <= 0.0 or not Injuries.can_sprint(d):
 		sprint = walk
+	# Neve no chão (inverno): corre menos, nunca menos que andando (Climate.apply).
+	sprint = maxf(walk, sprint * d.climate_sprint_mult)
 	return Vector2(walk * mult, sprint * mult)
 
 

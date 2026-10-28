@@ -369,6 +369,8 @@ func _welcome_info(dino: Dino, restored: bool, player_name: String, account_crea
 		"seed": sim.terrain.seed_value,
 		"map_size": sim.terrain.size,
 		"world_time": sim.world_time,
+		# /weather (dev): os trechos de tempo forçado que o cliente soma no clima dele (Climate.overrides).
+		"weather_override": sim.climate.overrides.duplicate(true),
 		"version": GameConfig.VERSION,
 		"dev": dev_mode,
 	}
@@ -406,7 +408,7 @@ func on_state(peer_id: int, seq: int, pos: Vector3, yaw: float, flags: int) -> v
 	var elapsed := clampf(now - d.last_client_time, 0.01, 1.0)
 	d.last_client_time = now
 	var p := sim.terrain.clamp_to_play_area(pos)
-	p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
+	p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height(), sim.water_level)
 	var moved := Movement.flat_distance(p, d.pos)
 	d.moving_speed = moved / elapsed if (flags & Net.CF_MOVING) else 0.0
 	d.sprinting = (flags & Net.CF_SPRINT) != 0 and d.stamina > 0.0
@@ -481,7 +483,11 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 		return
 	var cmd := parts[0].to_lower()
 	var reply := ""
-	if d == null and cmd != "/bots":
+	if cmd in ["/time", "/weather", "/clima", "/raio"]:
+		# Clima (sim/climate.gd): vale até sem dino vivo.
+		reply = sim.climate.dev_command(sim, parts)
+		_flush_events()
+	elif d == null and cmd != "/bots":
 		reply = "Você não está com um dino vivo."
 	else:
 		match cmd:
@@ -530,7 +536,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 			"/bots":
 				var tiers := sim.sim_tier_counts()
 				reply = "Bots: %d (alvo %d) · perto %d · longe %d · congelados %d" % [
-					sim.bot_count(), sim.bot_target, tiers["full"], tiers["reduced"], tiers["frozen"]]
+					sim.bot_count(), sim.effective_bot_target(), tiers["full"], tiers["reduced"], tiers["frozen"]]
 			"/spawn":
 				var sp_id := parts[1] if parts.size() > 1 else "dryosaurus"
 				if not Species.is_valid(sp_id):
@@ -547,7 +553,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 			"/nest", "/eggs", "/hatch":
 				reply = _dev_nest(d, cmd, parts)
 			_:
-				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /hurt tipo [s], /kill, /bots, /spawn especie [crescimento], /nest [x z], /eggs N, /hatch [todos]"
+				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /hurt tipo [s], /kill, /bots, /spawn especie [crescimento], /nest [x z], /eggs N, /hatch [todos], /time [estação|seca] [hh:mm] [+horas], /weather tipo [min], /clima, /raio"
 	if reply != "":
 		Net.s_message.rpc_id(peer_id, reply)
 
@@ -602,6 +608,14 @@ func _flush_events() -> void:
 				_broadcast_event(kind, ev["a"], 0, 0.0, "")
 			WorldSim.Ev.HIT:
 				_broadcast_event(kind, ev["a"], ev["b"], ev["value"], ev["part"])
+			WorldSim.Ev.LIGHTNING:
+				# Clarão no cliente; a posição vai no texto ("x;y;z").
+				var lp: Vector3 = ev["pos"]
+				_broadcast_event(kind, ev["a"], 0, 0.0, "%.2f;%.2f;%.2f" % [lp.x, lp.y, lp.z])
+				_log("[clima] raio matou um %s (bot %d)" % [Species.display_name(ev["species"]), ev["a"]])
+			WorldSim.Ev.WEATHER:
+				# /weather (dev): o clima forçado ("de;até" no texto) vai pra todos os clientes.
+				_broadcast_event(kind, ev["weather"], 0, 0.0, "%.4f;%.4f" % [ev["from"], ev["until"]])
 			WorldSim.Ev.DEATH:
 				_broadcast_event(kind, ev["a"], ev["carcass"], 0.0, "")
 				var pname: String = ev["player"]
@@ -646,7 +660,7 @@ static func build_snapshot(world: WorldSim) -> PackedFloat32Array:
 			flags |= Net.SF_PLAYER
 		if Movement.is_limping(d):
 			flags |= Net.SF_LIMP
-		if Movement.is_swimming(world.terrain, d.pos.x, d.pos.z, d.body_height()):
+		if Movement.is_swimming(world.terrain, d.pos.x, d.pos.z, d.body_height(), world.water_level):
 			flags |= Net.SF_SWIM
 		_put(data, i, d.id, Species.index_of(d.species), d.growth, d.pos, d.yaw, flags)
 		i += Net.SNAP_STRIDE

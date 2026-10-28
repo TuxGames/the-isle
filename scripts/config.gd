@@ -4,7 +4,7 @@ extends RefCounted
 
 ## Mude sempre que o protocolo de rede ou o formato do save mudar.
 ## Cliente e servidor com versões diferentes não se conectam.
-const VERSION := "0.3.0"
+const VERSION := "0.5.0"
 
 const DEFAULT_PORT := 7777
 
@@ -91,6 +91,76 @@ const SCENT_TELEPORT_M := 25.0
 ## Quanto tempo o rastro fica na tela e de quanto em quanto tempo dá pra farejar de novo.
 const SNIFF_SHOW_S := 8.0
 const SNIFF_COOLDOWN_S := 30.0
+
+## Clima, estações e dia/noite (design, seção 11; ver sim/climate.gd). (R) recomendação aprovada
+## pelo Marcelo: ajuste aqui. Tudo é tempo de MUNDO, que para quando ninguém está online. O clima
+## é calculado da semente do mapa + tempo do mundo (servidor e cliente chegam no mesmo resultado).
+## Dia de 1 h de mundo: 40 min claro + 20 min de noite. O mundo começa no nascer do sol.
+const DAY_S := 3600.0
+const NIGHT_S := 1200.0
+## Amanhecer e entardecer: a luz sobe e desce suave ao longo desse tempo.
+const TWILIGHT_S := 240.0
+## Hora do relógio do HUD no nascer do sol (o dia de 1 h vira 24 h no relógio: 05:00 às 21:00 claro).
+const CLOCK_SUNRISE_H := 5.0
+## Estações em horas de mundo: primavera, verão, outono, inverno (ano de 80 h; o ano começa na
+## primavera). Favorável (primavera + verão) = 56 h ≈ 9X; inverno = 12 h ≈ 2X, com X ≈ 6 h:
+## predomina o verão, como o Marcelo pediu. Use múltiplos de 20 min (WEATHER_BLOCK_S).
+const SEASON_HOURS := [14.0, 42.0, 12.0, 12.0]
+## O tempo (limpo, chuva...) muda em blocos desse tamanho, sorteados pela semente do mapa.
+## O primeiro bloco de um mundo novo é sempre limpo.
+const WEATHER_BLOCK_S := 1200.0
+## Peso de cada tempo por estação: [limpo, nublado, chuva, tempestade, neve, nevasca].
+## Neve e nevasca só no inverno; nevasca é rara.
+const WEATHER_CHANCES := [
+	[40, 30, 22, 8, 0, 0],  # primavera
+	[55, 25, 12, 8, 0, 0],  # verão
+	[30, 35, 25, 10, 0, 0],  # outono
+	[25, 30, 0, 0, 37, 8],  # inverno
+]
+## Neve acumulada (0 a 1): a "linha de neve" desce de SNOW_LINE_HIGH_M (0) até SNOW_LINE_LOW_M (1);
+## acima dela o chão fica branco (de 0 a 100% em SNOW_FADE_M metros). Baixadas (abaixo de
+## SNOW_LOWLAND_M) pegam menos: no rio, no máximo SNOW_LOWLAND_MIN.
+const SNOW_LINE_HIGH_M := 50.0
+const SNOW_LINE_LOW_M := -10.0
+const SNOW_FADE_M := 10.0
+const SNOW_LOWLAND_M := 12.0
+const SNOW_LOWLAND_MIN := 0.5
+## Neve fraca: acumula até SNOW_LIGHT_MAX (a linha desce até os morros) em SNOW_LIGHT_FILL_S.
+## Nevasca: enche tudo (1,0) em BLIZZARD_FILL_S. No inverno os picos ficam brancos mesmo sem
+## nevar (WINTER_SNOW_MIN). Sem nevar, a neve acumulada derrete toda em SNOW_MELT_S (2 h).
+const SNOW_LIGHT_MAX := 0.6
+const SNOW_LIGHT_FILL_S := 2400.0
+const BLIZZARD_FILL_S := 900.0
+const WINTER_SNOW_MIN := 0.2
+const SNOW_MELT_S := 7200.0
+## Inverno: fome x1,3; corrida x0,85 onde o chão está todo branco (proporcional à neve no chão);
+## bot carnívoro só caça com a fome abaixo de WINTER_HUNT_HUNGER (normal: 60, em bot_brain.gd);
+## a população-alvo de bots cai pra 80% (ninguém é morto pra isso: só repõe menos).
+const WINTER_HUNGER_MULT := 1.3
+const SNOW_SPRINT_MULT := 0.85
+const WINTER_HUNT_HUNGER := 40.0
+const WINTER_BOT_TARGET_MULT := 0.8
+## A água congela no trecho do rio em que a neve nas margens passa de WATER_FREEZE_COVER. Os trechos
+## mais baixos do rio (a baixada, RIVER_NEVER_FREEZE do comprimento) nunca congelam: sempre dá pra beber.
+const WATER_FREEZE_COVER := 0.5
+const RIVER_NEVER_FREEZE := 0.3
+## Verão: arbustos rebrotam 50% mais rápido e a reposição de bots mira 70% de herbívoros
+## (sempre dentro dos limites do diretor: HERBIVORE_SHARE ± DIRECTOR_SHARE_TOLERANCE).
+const SUMMER_REGROW_MULT := 1.5
+const SUMMER_HERBIVORE_SHARE := 0.7
+## Seca: em DROUGHT_CHANCE dos anos, nas últimas DROUGHT_S do verão (sem chuva). O rio baixa até
+## ficar com DROUGHT_RIVER_WIDTH da largura (leva DROUGHT_RAMP_S pra baixar e, no outono, o mesmo
+## pra voltar) e os arbustos rebrotam a DROUGHT_REGROW_MULT. O mapa não tem água pequena
+## (poças, lagos): só o rio encolhe.
+const DROUGHT_CHANCE := 0.5
+const DROUGHT_S := 21600.0
+const DROUGHT_RAMP_S := 3600.0
+const DROUGHT_RIVER_WIDTH := 0.6
+const DROUGHT_REGROW_MULT := 0.4
+## Chuva forte (tempestade, ou chuva há mais de um bloco seguido) encharca: rebrota x0,6.
+const HEAVY_RAIN_REGROW_MULT := 0.6
+## Raio: só em tempestade; a cada minuto de mundo, essa chance de cair um. Só mata BOT (nunca jogador).
+const LIGHTNING_CHANCE_PER_MIN := 0.05
 
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1

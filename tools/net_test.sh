@@ -11,7 +11,8 @@
 #     senha errada e é barrado; o bob volta com a senha certa, ainda igual.
 #  7. bob morre e renasce jovem.
 #     (depois: troca de senha, códigos de resgate, o faro: fred deixa pegadas, gil fareja;
-#     e a reprodução: hana faz ninho, postura com um bot, choca e nasce no ninho.)
+#     e a reprodução: hana faz ninho, postura com um bot, choca e nasce no ninho;
+#     e o clima: ivo pula pro inverno e o cliente calcula a mesma neve que o servidor.)
 #  8-10. mapa de 1024 m: o cliente recebe o tamanho; reiniciar sem --map-size mantém o do
 #        save; reiniciar com outro tamanho guarda o save antigo à parte.
 set -u
@@ -67,6 +68,7 @@ client resgata --code-file="$TMP/codigo.txt" || FAILS=$((FAILS+1)) # eva resgata
 client rastro || FAILS=$((FAILS+1))   # fred anda 30 m e sai (as pegadas ficam)
 client fareja || FAILS=$((FAILS+1))   # gil fareja: vê as pegadas do fred, não as próprias; recarga
 client ninho || FAILS=$((FAILS+1))    # hana: ninho (N), postura com bot (R), ovos, choco e nasce no ninho
+client clima || FAILS=$((FAILS+1))    # ivo:  inverno e nevasca; o cliente calcula o mesmo clima
 stop_server
 
 # Mapa de outro tamanho, num save à parte:

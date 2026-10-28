@@ -27,6 +27,8 @@ var scent_view: ScentView
 var nest_view: NestView
 var _nest_list: Array = []
 var _holding_nest := false
+## Clima: dia/noite, chuva, neve, gelo, seca e raio (o mesmo Climate do servidor).
+var weather_view: WeatherView
 
 ## Outros dinos e carcaças: id -> DinoView
 var views := {}
@@ -285,6 +287,8 @@ func _clear_world() -> void:
 	hud.set_nest_ready(false)
 	hud.set_nest_status("")
 	hud.set_mate_request("")
+	if weather_view:
+		weather_view.pause()
 	hud.set_account("")
 	hud.settings_panel.set_admin(false)
 	hud.settings_panel.set_perks({})
@@ -305,6 +309,14 @@ func _on_welcome(info: Dictionary) -> void:
 		add_child(terrain_view)
 		terrain_view.set_view_distance(settings.view_distance)
 		terrain_view.set_shadows(settings.shadows)
+		if weather_view:
+			weather_view.queue_free()
+		weather_view = WeatherView.create(terrain, terrain_view, int(info["seed"]))
+		add_child(weather_view)
+		weather_view.weather_text_changed.connect(hud.set_weather)
+	var forced = info.get("weather_override", [])
+	weather_view.set_overrides(forced if forced is Array else [])
+	weather_view.sync_time(float(info.get("world_time", 0.0)))
 	_holding_nest = false
 	if my_view:
 		my_view.queue_free()
@@ -337,7 +349,7 @@ func _on_welcome(info: Dictionary) -> void:
 	else:
 		hud.add_message("Você nasceu como %s jovem. Coma, beba e cresça." % Species.display_name(my_species))
 	if bool(info.get("dev", false)):
-		hud.add_message("Servidor em modo dev: Enter → /grow 1, /tp x z, /hp 50, /food 100 100, /kill")
+		hud.add_message("Servidor em modo dev: Enter → /grow 1, /tp x z, /hp 50, /food 100 100, /kill, /time inverno, /weather chuva")
 	if not _args.has("screenshot"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	# --cmd="/grow 1;/tp 200 200": comandos de dev automáticos (prints e testes).
@@ -396,6 +408,8 @@ func _on_snapshot(data: PackedFloat32Array) -> void:
 func _on_self_stats(st: PackedFloat32Array) -> void:
 	stats = st
 	hud.set_stats(st, my_species)
+	if weather_view and st.size() > Net.ST_WORLD_TIME:
+		weather_view.sync_time(st[Net.ST_WORLD_TIME])
 	if st.size() > Net.ST_GROWTH_BOOST:
 		hud.settings_panel.set_boost(st[Net.ST_GROWTH_BOOST])
 	if my_view:
@@ -439,6 +453,16 @@ func _on_event(kind: int, a: int, b: int, value: float, text: String) -> void:
 				views[b].flash_damage()
 			if a == my_id:
 				hud.add_message("Acertou: %s (−%d)" % [text, roundi(value)])
+		WorldSim.Ev.LIGHTNING:
+			# Raio (só cai em bot): "x;y;z" no texto.
+			var p := text.split(";")
+			if weather_view and p.size() == 3:
+				weather_view.lightning(Vector3(float(p[0]), float(p[1]), float(p[2])))
+		WorldSim.Ev.WEATHER:
+			# /weather (dev): "de;até" no texto; a < 0 volta ao normal.
+			var span := text.split(";")
+			if weather_view and span.size() == 2:
+				weather_view.set_override(a, float(span[0]), float(span[1]))
 
 
 ## Resposta do faro. `ok` false: ainda em recarga (o servidor diz quanto falta).
@@ -666,12 +690,12 @@ func _update_local(delta: float) -> void:
 		my_yaw = Movement.rotate_toward(my_yaw, want, Movement.turn_rate_rad(my_species) * delta)
 		var align := cos(wrapf(want - my_yaw, -PI, PI))
 		var spd := (sprint if _sprinting else walk) * clampf(align, 0.3, 1.0) * clampf(move.length(), 0.0, 1.0)
-		if Movement.is_swimming(terrain, my_pos.x, my_pos.z, _body_height()):
+		if Movement.is_swimming(terrain, my_pos.x, my_pos.z, _body_height(), _water_level()):
 			spd *= Movement.SWIM_SPEED_MULT
 		my_pos += Vector3(sin(my_yaw), 0.0, cos(my_yaw)) * spd * delta
 	_push_out_of_others()
 	my_pos = terrain.clamp_to_play_area(my_pos)
-	my_pos.y = Movement.ground_y(terrain, my_pos.x, my_pos.z, _body_height())
+	my_pos.y = Movement.ground_y(terrain, my_pos.x, my_pos.z, _body_height(), _water_level())
 	my_view.position = my_pos
 	my_view.rotation.y = my_yaw
 	if _moving and my_view.flags & Net.SF_REST:
@@ -755,8 +779,10 @@ func _prompt_text() -> String:
 	var fwd := Vector3(sin(my_yaw), 0, cos(my_yaw))
 	var mouth := my_pos + fwd * ((ap.z if carn else ap.z * 0.85) * s)
 	var reach := WorldSim.MOUTH_REACH * maxf(s, 0.5)
-	if terrain.is_water(mouth.x, mouth.z) or terrain.is_water(mouth.x + fwd.x * reach, mouth.z + fwd.z * reach):
+	if _can_drink_at(mouth.x, mouth.z) or _can_drink_at(mouth.x + fwd.x * reach, mouth.z + fwd.z * reach):
 		return "[E] beber"
+	if weather_view and terrain.is_water(mouth.x, mouth.z) and weather_view.is_frozen(mouth.z):
+		return "Água congelada"
 	if carn:
 		for v in views.values():
 			if v.is_dead:
@@ -793,6 +819,16 @@ func _mate_prompt() -> String:
 		if Movement.flat_distance(my_pos, v.position) <= reach:
 			return "[R] chamar pra fazer ninho"
 	return ""
+
+
+## Nível do rio agora (baixa na seca), pelo clima calculado aqui.
+func _water_level() -> float:
+	return weather_view.water_level() if weather_view else Terrain.WATER_LEVEL
+
+
+## Dá pra beber aqui? Água congelada ou que secou não serve (o servidor confere igual).
+func _can_drink_at(x: float, z: float) -> bool:
+	return weather_view.can_drink(x, z) if weather_view else terrain.is_water(x, z)
 
 
 # ---------------------------------------------------------------- utilidades

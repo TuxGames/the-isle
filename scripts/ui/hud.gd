@@ -42,6 +42,8 @@ var _species_label: Label
 ## Ferimentos com o tempo que falta ("Sangrando 2:10 · Osso quebrado 8:40"); some sem ferimento.
 var _injury_label: Label
 var _clock_label: Label
+## Tempo (limpo, chuva, neve...), calculado pelo WeatherView.
+var _weather_label: Label
 var _roster_label: Label
 var _sniff_label: Label
 var _prompt_label: Label
@@ -213,6 +215,8 @@ func _build_game() -> void:
 	info.add_child(ibox)
 	_clock_label = _label("", 14)
 	ibox.add_child(_clock_label)
+	_weather_label = _label("", 14, Color(0.75, 0.85, 0.95))
+	ibox.add_child(_weather_label)
 	_roster_label = _label("", 14, Color(0.85, 0.9, 0.8))
 	ibox.add_child(_roster_label)
 	_sniff_label = _label("", 14, Color(1.0, 0.86, 0.35))
@@ -480,7 +484,12 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 			Injuries.FRACTURE: st[Net.ST_FRACTURE], Injuries.DEEP: st[Net.ST_DEEP]})
 	_injury_label.visible = _injury_label.text != ""
 	var wt: float = st[Net.ST_WORLD_TIME]
-	_clock_label.text = "Tempo do mundo: %dh %02dmin" % [int(wt / 3600.0), int(fmod(wt, 3600.0) / 60.0)]
+	_clock_label.text = Climate.calendar_text(wt)
+
+
+## Tempo agora ("Chuva", "Limpo · seca"), do WeatherView.
+func set_weather(text: String) -> void:
+	_weather_label.text = "Tempo: " + text if text != "" else ""
 
 
 func set_roster(names: Array) -> void:

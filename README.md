@@ -6,10 +6,11 @@ Feito em **Godot 4.7** com servidor dedicado.
 - Ideia e game design: **Marcelo**
 - Programação: **Tux** + Claude Code
 
-**Status: v0.2, protótipo jogável.** Mapa de 2 km com rio, 3 espécies (Carnotaurus,
+**Status: v0.5, protótipo jogável.** Mapa de 2 km com rio, 3 espécies (Carnotaurus,
 Triceratops, Dryosaurus) feitas de formas simples, ~70 bots que caçam, fogem e revidam (os
-longe dos jogadores congelam), fome/sede/crescimento, mordida com hitbox de verdade, login com
-senha e multiplayer com servidor dedicado.
+longe dos jogadores congelam), fome/sede/crescimento, mordida com hitbox de verdade,
+ferimentos, faro, ninhos e ovos, dia e noite, estações com neve e seca, login com senha e
+multiplayer com servidor dedicado.
 O que vem depois: [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Jogar

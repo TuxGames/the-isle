@@ -165,17 +165,39 @@ memória do servidor: reiniciar o servidor apaga o rastro.
 
 | Decisão | Status |
 |---|---|
-| Inverno com neve: mais fome, corre menos, água congela, instinto de caça reduzido | ⬜ |
-| Inverno: menos população de tudo, mas sem mortandade excessiva | ⬜ |
-| Verão: mais comida pros herbívoros → mais herbívoros → carnívoros crescem tranquilos | ⬜ |
-| Duração: períodos favoráveis = **9X**; desfavoráveis = **X a 2X**. Predomina verão, com outono/primavera e alguns "meses" de inverno | ⬜ |
-| Ciclo completo longo: **~70–90 horas jogadas** (só conta com alguém online) | 🟡 o relógio do mundo existe, aparece no HUD e pausa; estações ⬜ |
-| Neve depende do relevo: altitude neva em certos períodos; às vezes neva em tudo (baixadas menos) | ⬜ |
-| Escassez com causa plausível (chuva forte, seca...) | ⬜ |
-| Seca: rio pequeno seca, rio gigante só diminui | ⬜ |
-| Morte por raio **só para bots**, nunca para jogadores | ⬜ |
-| (R) Dia e noite: um dia dura 1 h jogada (40 min claro + 20 min de noite) | ⬜ v0.5 |
-| (R) Neve acumulada derrete aos poucos depois da nevasca | ⬜ v0.5 |
+| Inverno com neve: mais fome, corre menos, água congela, instinto de caça reduzido | ✅ (R) fome x1,3; corrida x0,85 onde o chão está branco (vale pros bots); a água congela nos trechos do rio com neve nas margens; bot carnívoro só sai pra caçar com a fome abaixo de 40 (normal: 60) |
+| Inverno: menos população de tudo, mas sem mortandade excessiva | ✅ (R) a população-alvo de bots cai pra 80%; ninguém é morto pra isso, só repõe menos. Na primavera volta ao normal |
+| Verão: mais comida pros herbívoros → mais herbívoros → carnívoros crescem tranquilos | ✅ (R) arbustos rebrotam 50% mais rápido e a reposição de bots mira 70% de herbívoros (dentro dos limites do diretor: 55% a 75%) |
+| Duração: períodos favoráveis = **9X**; desfavoráveis = **X a 2X**. Predomina verão, com outono/primavera e alguns "meses" de inverno | ✅ (R) primavera 14 h, verão 42 h, outono 12 h, inverno 12 h (favorável 56 h ≈ 9X, inverno ≈ 2X, com X ≈ 6 h) |
+| Ciclo completo longo: **~70–90 horas jogadas** (só conta com alguém online) | ✅ (R) ano de 80 h. O clima sai do tempo do mundo, que para sem ninguém online |
+| Neve depende do relevo: altitude neva em certos períodos; às vezes neva em tudo (baixadas menos) | ✅ neve fraca desce a linha de neve das montanhas até os morros (a baixada fica verde); nevasca (rara) neva em tudo, e as baixadas pegam menos (no máximo metade na beira do rio). No inverno os picos ficam brancos mesmo sem nevar |
+| A água congela, mas o rio da baixada nunca congela inteiro (beber nunca fica impossível) | ✅ (R) os 30% mais baixos do rio nunca congelam; os bots procuram água aberta |
+| Escassez com causa plausível (chuva forte, seca...) | ✅ (R) chuva forte (tempestade, ou chuva mais de 20 min seguidos): arbustos rebrotam a 60%; seca: a 40% |
+| Seca: rio pequeno seca, rio gigante só diminui | ✅ (R) em metade dos anos, nas últimas 6 h do verão (sem chuva): o rio baixa até ficar com 60% da largura e os pontos de beber vão junto. O mapa não tem água pequena (poças, lagos, afluentes), então só o rio encolhe |
+| Morte por raio **só para bots**, nunca para jogadores | ✅ (R) só em tempestade, com 5% de chance por minuto; atinge um bot ativo (nunca jogador nem bot congelado), que morre de "raio" e vira carcaça. Clarão e risco de luz na tela |
+| (R) Dia e noite: um dia dura 1 h jogada (40 min claro + 20 min de noite) | ✅ amanhecer e entardecer suaves (4 min); a noite é escura mas dá pra jogar (lua e luz azulada). Relógio do HUD: claro das 05:00 às 21:00 |
+| (R) Neve acumulada derrete aos poucos depois da nevasca | ✅ derrete toda em 2 h de mundo sem nevar |
+
+Clima da v0.5 (números em `config.gd`, seção "Clima"; todos (R)):
+
+| Tempo | Primavera | Verão | Outono | Inverno |
+|---|---|---|---|---|
+| Limpo | 40% | 55% | 30% | 25% |
+| Nublado | 30% | 25% | 35% | 30% |
+| Chuva | 22% | 12% | 25% | — |
+| Tempestade (com raio) | 8% | 8% | 10% | — |
+| Neve | — | — | — | 37% |
+| Nevasca | — | — | — | 8% |
+
+- O tempo muda a cada 20 min de mundo. O primeiro bloco de um mundo novo é sempre limpo.
+- Neve acumulada: neve fraca enche até 60% em 40 min (a linha de neve vai de 50 m até ~14 m de
+  altura: só montanhas e morros); nevasca enche tudo em 15 min; sem nevar, derrete em 2 h.
+- No HUD: "Dia 12 · Verão · 14:20" e "Tempo: Chuva" (ou "Limpo · seca").
+- Comandos de dev (servidor `--dev`): `/time inverno`, `/time 22:00`, `/time +30m` (só pra
+  frente), `/time seca`; `/weather nevasca 20` (força por N min, só até o servidor reiniciar;
+  `/weather auto` volta ao normal); `/clima` (estado completo); `/raio` (cai um raio num bot).
+- Como funciona: o clima é calculado da semente do mapa + tempo do mundo, igual no servidor e
+  nos jogadores. Não precisou de mensagem nova na rede nem de mudar o save.
 
 ## 12. Códigos de resgate (R)
 

@@ -41,7 +41,8 @@ var focus := Vector3(-1.0e9, 0.0, -1.0e9)
 
 ## Vector2i -> {"lod": int, "node": Node3D}
 var _chunks := {}
-var _ground_mat: StandardMaterial3D
+## Cor dos vértices + neve do clima (ClimateMaterials).
+var _ground_mat: ShaderMaterial
 var _bush_mesh: SphereMesh
 var _tint := FastNoiseLite.new()
 var _refresh_t := 0.0
@@ -49,6 +50,9 @@ var _refresh_t := 0.0
 var view_distance := MAX_VIEW_DIST
 var _env: Environment
 var _sun: DirectionalLight3D
+var _water: MeshInstance3D
+var _water_mat: ShaderMaterial
+var _bush_mat: ShaderMaterial
 
 
 static func build(t: Terrain) -> TerrainView:
@@ -164,22 +168,17 @@ func loaded_chunks() -> Dictionary:
 func _setup_materials() -> void:
 	_tint.seed = terrain.seed_value + 55
 	_tint.frequency = 0.02
-	_ground_mat = StandardMaterial3D.new()
-	_ground_mat.vertex_color_use_as_albedo = true
-	# As cores abaixo estão em sRGB (como num editor de imagem).
-	_ground_mat.vertex_color_is_srgb = true
-	_ground_mat.roughness = 0.95
-	# As "saias" dos pedaços (ver _chunk_arrays) são vistas dos dois lados.
-	_ground_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# Cores dos vértices em sRGB (como num editor de imagem), dos dois lados (as "saias" dos
+	# pedaços, ver _chunk_arrays) e com a neve do clima por cima.
+	_ground_mat = ClimateMaterials.ground()
 	_bush_mesh = SphereMesh.new()
 	_bush_mesh.radius = Terrain.BUSH_RADIUS
 	_bush_mesh.height = Terrain.BUSH_RADIUS * 1.5
 	_bush_mesh.radial_segments = 10
 	_bush_mesh.rings = 6
-	var bush_mat := StandardMaterial3D.new()
-	bush_mat.albedo_color = Color(0.18, 0.36, 0.13)
-	bush_mat.roughness = 1.0
-	_bush_mesh.material = bush_mat
+	# Verde de sempre, com neve por cima no inverno (ClimateMaterials).
+	_bush_mat = ClimateMaterials.bush()
+	_bush_mesh.material = _bush_mat
 
 
 func _build_chunk(key: Vector2i, lod: int) -> void:
@@ -352,20 +351,16 @@ func _ground_color(h: float, steep: float, noise: float) -> Color:
 func _build_water() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(terrain.size, terrain.size)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.1, 0.26, 0.3, 0.86)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.roughness = 0.55
-	mat.metallic = 0.0
-	mat.metallic_specular = 0.15
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	plane.material = mat
+	# Água com gelo nos trechos congelados (ClimateMaterials); desce na seca (set_climate).
+	_water_mat = ClimateMaterials.water()
+	plane.material = _water_mat
 	var mi := MeshInstance3D.new()
 	mi.name = "Water"
 	mi.mesh = plane
 	mi.position = Vector3(terrain.size * 0.5, Terrain.WATER_LEVEL, terrain.size * 0.5)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+	_water = mi
 
 
 func _build_environment() -> void:
@@ -416,3 +411,26 @@ func set_view_distance(d: float) -> void:
 func set_shadows(on: bool) -> void:
 	if _sun:
 		_sun.shadow_enabled = on
+
+
+# ---------------------------------------------------------------- clima (WeatherView)
+
+## Neve e água do clima: linha de neve (Climate.snow_line), nível do rio (baixa na seca) e o
+## mapa do gelo (um texel por Climate.BANK_STEP de z; null = mantém o que tinha).
+func set_climate(snow_line: float, water_level: float, ice: Texture2D = null, ice_count: int = 0) -> void:
+	_ground_mat.set_shader_parameter("snow_line", snow_line)
+	_bush_mat.set_shader_parameter("snow_line", snow_line)
+	if _water:
+		_water.position.y = water_level
+	if ice != null:
+		_water_mat.set_shader_parameter("ice_map", ice)
+		_water_mat.set_shader_parameter("ice_count", float(ice_count))
+
+
+## Céu e sol, pro SkyView (dia/noite e tempo fechado).
+func get_environment() -> Environment:
+	return _env
+
+
+func get_sun() -> DirectionalLight3D:
+	return _sun
