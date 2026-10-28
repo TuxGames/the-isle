@@ -5,9 +5,11 @@ extends Node
 ## Papéis (--role=):
 ##   alice       carnívoro: vira adulto, erra um golpe de costas, acerta o bob de frente,
 ##               confere que o bob some quando sai, fica jogando mais um pouco e sai.
-##   bob         dryosaurus novo: confere que nasce jovem, espera ser mordido, grava o
+##   bob         dryosaurus novo: confere que nasce jovem, espera ser mordido (fica sangrando,
+##               com osso quebrado e mordida funda), para o sangramento (/hurt), grava o
 ##               próprio estado em --out e sai.
-##   bob_return  entra de novo como bob e confere que voltou EXATAMENTE igual (--expect).
+##   bob_return  entra de novo como bob e confere que voltou EXATAMENTE igual (--expect),
+##               com os ferimentos congelados.
 ##   bob_die     entra, morre (/kill) e confere que renasce jovem.
 ##   map_check   entra como carla e confere que o mapa tem o tamanho de --expect-map-size
 ##               e que o servidor a colocou no chão desse mesmo terreno.
@@ -18,6 +20,10 @@ extends Node
 ##   admin_cria  entra como Tux (admin), cria um código de boost com 2 usos e grava em --out.
 ##   resgata     entra como eva (não é admin), resgata o código de --code-file, não consegue
 ##               resgatar de novo nem criar código, e recebe o boost nos próprios status.
+##   rastro      entra como fred (dryosaurus), vai pra (150, 150) com /tp, anda 30 m pro leste e sai.
+##   fareja      entra como gil (carnotaurus), vai pra perto do caminho do fred, anda um pouco,
+##               fareja (F): recebe as pegadas do fred e não as próprias; farejar de novo logo
+##               em seguida dá "em recarga".
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -80,9 +86,13 @@ func _process(delta: float) -> void:
 
 
 func _on_connected() -> void:
-	var species := "carnotaurus" if role == "alice" else "dryosaurus"
+	var species := "carnotaurus" if role in ["alice", "fareja"] else "dryosaurus"
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
-	if role in ["troca_senha", "dani_nova"]:
+	if role == "rastro":
+		pname = "fred"
+	elif role == "fareja":
+		pname = "gil"
+	elif role in ["troca_senha", "dani_nova"]:
 		pname = "dani"
 	elif role == "admin_cria":
 		pname = "Tux"
@@ -114,6 +124,10 @@ func _on_connected() -> void:
 			_admin_cria()
 		"resgata":
 			_resgata()
+		"rastro":
+			_rastro()
+		"fareja":
+			_fareja()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -298,6 +312,10 @@ func _alice() -> void:
 	if hit:
 		var e: Array = _hits_by(my_id)[0]
 		_check(e[2] == bob_id and e[3] > 0.0, "dano registrado no bob (%.1f, parte: %s)" % [e[3], e[4]])
+		# Carnotauro adulto (1.500 kg) quebra o osso de um dryosaurus (90 kg): os outros veem ele
+		# mancar mesmo com a vida acima do limite de mancar.
+		var limp := await _wait_for(func(): return entities.has(bob_id) and (int(entities[bob_id][2]) & Net.SF_LIMP) != 0, 2.0)
+		_check(limp, "bob manca de osso quebrado (visto pela alice)")
 
 	# Bob sai depois de ser mordido: o dino dele tem que sumir do mundo.
 	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0 + GameConfig.COMBAT_LOGOUT_S)
@@ -323,17 +341,32 @@ func _bob() -> void:
 	var hp0: float = stats[Net.ST_HEALTH]
 	var bitten := await _wait_for(func(): return stats[Net.ST_HEALTH] < hp0 - 0.01, 40.0)
 	_check(bitten, "levou a mordida (vida %.1f → %.1f)" % [hp0, stats[Net.ST_HEALTH]])
+	# Ferimentos da mordida (Injuries.from_hit): a mordida tira mais da metade da vida dele.
+	var hurt := await _wait_for(func(): return stats[Net.ST_BLEED] > 0.0 and stats[Net.ST_FRACTURE] > 0.0 \
+			and stats[Net.ST_DEEP] > 0.0, 2.0)
+	_check(hurt, "ficou sangrando, com osso quebrado e mordida funda (%.0f / %.0f / %.0f s)" % [
+			stats[Net.ST_BLEED], stats[Net.ST_FRACTURE], stats[Net.ST_DEEP]])
+	_check(stats[Net.ST_SPRINT] <= stats[Net.ST_WALK] + 0.001,
+			"osso quebrado não corre (andar %.2f, correr %.2f)" % [stats[Net.ST_WALK], stats[Net.ST_SPRINT]])
+	var hp_bleed: float = stats[Net.ST_HEALTH]
+	await _wait(1.0)
+	_check(stats[Net.ST_HEALTH] < hp_bleed - 0.01, "sangrando perde vida (%.2f → %.2f)" % [hp_bleed, stats[Net.ST_HEALTH]])
 	# Espera passar o tempo de briga: quem sai logo depois de apanhar deixa o dino mais um pouco
 	# no mundo (test_world cobre isso). Aqui o bob tem que voltar exatamente igual.
 	await _wait(GameConfig.COMBAT_LOGOUT_S + 0.5)
 	# Fome e sede em 20%: não cura nem passa fome rápido, então a vida fica parada
 	# e dá pra comparar com precisão quando ele voltar.
+	# O sangramento também tiraria vida; para ele com o comando de dev. A fratura e a mordida
+	# funda continuam e têm que voltar congeladas.
+	_dev("/hurt sangramento 0")
 	_dev("/food 20 20")
 	await _wait(0.6)
+	_check(stats[Net.ST_BLEED] == 0.0 and stats[Net.ST_FRACTURE] > 0.0, "/hurt parou só o sangramento")
 	var snap := {
 		"health": stats[Net.ST_HEALTH], "hunger": stats[Net.ST_HUNGER],
 		"thirst": stats[Net.ST_THIRST], "growth": stats[Net.ST_GROWTH],
 		"stamina": stats[Net.ST_STAMINA], "x": my_pos.x, "z": my_pos.z,
+		"fracture": stats[Net.ST_FRACTURE], "deep": stats[Net.ST_DEEP],
 	}
 	var f := FileAccess.open(String(args.get("out", "user://bob_state.json")), FileAccess.WRITE)
 	f.store_string(JSON.stringify(snap))
@@ -355,6 +388,14 @@ func _bob_return() -> void:
 	_check(absf(stats[Net.ST_THIRST] - float(expect["thirst"])) < eps, "sede igual (%.3f vs %.3f)" % [stats[Net.ST_THIRST], expect["thirst"]])
 	_check(absf(stats[Net.ST_GROWTH] - float(expect["growth"])) < 0.001, "crescimento igual (%.4f vs %.4f)" % [stats[Net.ST_GROWTH], expect["growth"]])
 	_check(Vector2(my_pos.x - float(expect["x"]), my_pos.z - float(expect["z"])).length() < 0.5, "mesma posição")
+	# Ferimentos: só andam com o bob online. Entre gravar e voltar ele fica online menos de 1 s
+	# no total (a fome, com eps 0,05, já garante isso), então o tempo que falta caiu no máximo
+	# esse tanto e nunca subiu.
+	for key in [["fracture", Net.ST_FRACTURE, "osso quebrado"], ["deep", Net.ST_DEEP, "mordida funda"]]:
+		var want := float(expect[key[0]])
+		var got: float = stats[key[1]]
+		_check(got <= want + 0.001 and got > want - 1.0, "%s congelado (%.2f s vs %.2f s)" % [key[2], got, want])
+	_check(stats[Net.ST_BLEED] == 0.0, "sem sangramento (parou antes de sair)")
 	_finish()
 
 
@@ -392,4 +433,74 @@ func _map_check() -> void:
 				and my_pos.z >= ter.play_min and my_pos.z <= ter.play_max
 		_check(inside, "nasceu dentro do mapa (%.0f, %.0f)" % [my_pos.x, my_pos.z])
 		_check(absf(my_pos.y - ter.height_at(my_pos.x, my_pos.z)) < 0.05, "nasceu no chão do mesmo terreno")
+	_finish()
+
+
+## Vai pra (x, z) com /tp e espera o servidor mandar a posição nova.
+func _teleport(x: int, z: int) -> bool:
+	var seq0 := my_seq
+	_dev("/tp %d %d" % [x, z])
+	return await _wait_for(func(): return my_seq > seq0 and Vector2(my_pos.x - x, my_pos.z - z).length() < 1.0, 5.0)
+
+
+## Anda em linha reta, a ~5 m/s, mandando a posição como o jogo manda (c_state a 20 Hz).
+func _walk_line(dir: Vector3, meters: float) -> void:
+	var done := 0.0
+	while done < meters:
+		await get_tree().process_frame
+		var step := minf(5.0 * get_process_delta_time(), meters - done)
+		my_pos += dir * step
+		done += step
+	await _wait(0.3)
+
+
+## Faro (design, seção 10): deixa um rastro de pegadas pro gil farejar.
+func _rastro() -> void:
+	if not await _wait_for(func(): return my_seq > 0, 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _teleport(150, 150):
+		_fail("/tp não chegou")
+		return _finish()
+	await _wait(0.5)
+	await _walk_line(Vector3(1, 0, 0), 30.0)
+	_check(Vector2(my_pos.x - 180.0, my_pos.z - 150.0).length() < 0.5, "andou 30 m (até %.0f, %.0f)" % [my_pos.x, my_pos.z])
+	_finish()
+
+
+func _fareja() -> void:
+	var answers: Array = []
+	Net.scent_received.connect(func(ok, data, cooldown): answers.append([ok, data, cooldown]))
+	if not await _wait_for(func(): return my_seq > 0, 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _teleport(165, 190):
+		_fail("/tp não chegou")
+		return _finish()
+	await _wait(0.5)
+	# Anda 12 m pro sul: deixa pegadas próprias, que o faro não pode mostrar.
+	await _walk_line(Vector3(0, 0, -1), 12.0)
+	Net.c_sniff.rpc_id(1)
+	if not await _wait_for(func(): return answers.size() >= 1, 5.0):
+		_fail("sem resposta do faro")
+		return _finish()
+	_check(bool(answers[0][0]), "farejou")
+	var data: PackedFloat32Array = answers[0][1]
+	var prints := 0
+	var own := 0
+	var dryo := Species.index_of("dryosaurus")
+	for i in range(0, data.size(), ScentTrail.STRIDE):
+		if int(data[i + 4]) != ScentTrail.KIND_PRINT:
+			continue
+		prints += 1
+		if absf(data[i + 1] - 150.0) > 1.0 or int(data[i + 3]) != dryo:
+			own += 1
+	_check(prints >= 8, "recebeu as pegadas do fred (%d)" % prints)
+	_check(own == 0, "nenhuma pegada própria nem de outro lugar (%d)" % own)
+	Net.c_sniff.rpc_id(1)
+	if not await _wait_for(func(): return answers.size() >= 2, 5.0):
+		_fail("sem resposta do segundo faro")
+		return _finish()
+	_check(not bool(answers[1][0]) and float(answers[1][2]) > GameConfig.SNIFF_COOLDOWN_S - 5.0,
+			"logo depois: em recarga (%.0f s)" % float(answers[1][2]))
 	_finish()

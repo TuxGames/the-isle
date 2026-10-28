@@ -6,7 +6,8 @@ extends RefCounted
 
 ## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
 ## 3: os dinos têm growth_boost_s (save antigo sem o campo vale 0).
-const SAVE_FORMAT := 3
+## 4: os dinos têm "injuries" (save antigo = sem ferimentos).
+const SAVE_FORMAT := 4
 
 enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
@@ -41,6 +42,10 @@ var respawn_queue: Array = []
 var lingering := {}
 ## Onde e qual bot entra, e quais congelados mudam de lugar (design, seção 3).
 var director := PopulationDirector.new()
+## Pegadas pro faro (design, seção 10).
+var scent := ScentTrail.new()
+## Quando cada jogador pode farejar de novo (nome -> world_time).
+var _sniff_ready := {}
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -248,6 +253,8 @@ func step(dt: float) -> void:
 	for d: Dino in dinos.values().duplicate():
 		if d.alive and d.health <= 0.0:
 			var cause := "fome e sede" if (d.hunger <= 0.0 or d.thirst <= 0.0) else "ferimentos"
+			if Injuries.has(d, Injuries.BLEED):
+				cause = "sangramento"
 			var killer: Dino = dinos.get(d.last_attacker_id)
 			if killer != null and world_time - d.last_attacked_time < 10.0:
 				cause = "morto por " + (killer.player_name if not killer.is_bot else Species.display_name(killer.species))
@@ -258,6 +265,7 @@ func step(dt: float) -> void:
 	_process_respawns()
 	director.update(self, dt)
 	_finish_lingering()
+	scent.record(self)
 
 
 ## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
@@ -391,6 +399,7 @@ func _resolve_attacks(dt: float) -> void:
 		var part: String = hit["part"]
 		var dmg := Combat.damage(attacker, part)
 		apply_damage(target, dmg, attacker)
+		Injuries.from_hit(target, attacker, dmg, part)
 		events.append({"type": Ev.HIT, "a": attacker.id, "b": target.id, "value": dmg, "part": part})
 	pending_attacks = still
 
@@ -604,6 +613,26 @@ func request_logout(id: int) -> bool:
 	return false
 
 
+## Faro (design, seção 10): pegadas dos outros dinos dos últimos SCENT_MAX_AGE_S e carcaças com
+## carne, num raio que depende da espécie (`smell_radius`). Recarga por jogador, contada em tempo
+## de mundo. Devolve {"ok": bool, "wait": segundos até poder de novo, "data": ScentTrail.STRIDE
+## floats por item}.
+func sniff(d: Dino) -> Dictionary:
+	var key := d.player_name if not d.is_bot else "bot:%d" % d.id
+	var ready_at := float(_sniff_ready.get(key, -INF))
+	if world_time < ready_at:
+		return {"ok": false, "wait": ready_at - world_time, "data": PackedFloat32Array()}
+	_sniff_ready[key] = world_time + GameConfig.SNIFF_COOLDOWN_S
+	var radius := float(d.spec().get("smell_radius", 50.0))
+	var data := scent.query(d.pos, radius, world_time, GameConfig.SCENT_MAX_AGE_S, d.id)
+	for c in carcasses.values():
+		var p: Vector3 = c["pos"]
+		if float(c["meat"]) > 0.5 and Movement.flat_distance(d.pos, p) <= radius:
+			data.append_array(PackedFloat32Array([p.x, p.z, world_time - float(c["t"]),
+					Species.index_of(c["species"]), ScentTrail.KIND_CARCASS]))
+	return {"ok": true, "wait": GameConfig.SNIFF_COOLDOWN_S, "data": data}
+
+
 func _finish_lingering() -> void:
 	for id in lingering.keys():
 		if not dinos.has(id):
@@ -719,6 +748,7 @@ func save_mismatch(data: Dictionary) -> String:
 ## Carrega um save. Jogadores ficam só nos registros (entram de novo quando conectam).
 ## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 ## Formato 2 lê igual: os dinos só não tinham "growth_boost_s" (Dino.from_dict usa 0).
+## Formato 3 lê igual: os dinos só não tinham "injuries" (Dino.from_dict deixa sem ferimentos).
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))

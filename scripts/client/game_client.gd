@@ -11,6 +11,8 @@ extends Node3D
 ##   --solo                                                   abre servidor local e entra
 ##   --screenshot=arquivo.png --screenshot-after=8            tira print (testes)
 ##   --open-settings=Vídeo|Controles|Interface|Conta          abre as configurações (prints)
+##   --fake-latest=v9.9.9                                     finge que saiu versão nova (prints)
+##   --auto-sniff=3                                           fareja sozinho N s depois de entrar (prints)
 
 const MOUSE_SENS := 0.0035
 
@@ -19,6 +21,8 @@ var settings := Settings.new()
 var terrain: Terrain
 var terrain_view: TerrainView
 var camera: Camera3D
+## Rastro do faro (tecla F).
+var scent_view: ScentView
 
 ## Outros dinos e carcaças: id -> DinoView
 var views := {}
@@ -51,6 +55,9 @@ var _connect_timer: SceneTreeTimer
 ## Nome com que o servidor aceitou o login, e a chave nova de uma troca de senha em andamento.
 var _my_name := ""
 var _pending_new_key := ""
+## Quando (Time.get_ticks_msec) o faro fica pronto de novo, pelo que o servidor disse.
+## A recarga de verdade quem confere é o servidor; isto só serve pro HUD e pra não mandar à toa.
+var _sniff_ready_ms := 0
 
 
 func start(args: Dictionary) -> void:
@@ -94,6 +101,7 @@ func start(args: Dictionary) -> void:
 	Net.event_received.connect(_on_event)
 	Net.died.connect(_on_died)
 	Net.message_received.connect(func(t): hud.add_message(t))
+	Net.scent_received.connect(_on_scent)
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -105,6 +113,8 @@ func start(args: Dictionary) -> void:
 	camera.position = Vector3(256, 80, 100)
 	add_child(camera)
 	camera.look_at(Vector3(256, 0, 256))
+	scent_view = ScentView.new()
+	add_child(scent_view)
 
 	hud.fill_menu(String(args.get("name", "")), String(args.get("connect", "")), String(args.get("species", "")))
 	if args.has("cam-yaw"):
@@ -119,6 +129,11 @@ func start(args: Dictionary) -> void:
 				String(args.get("password", "")))
 	if args.has("open-settings"):
 		hud.open_settings(String(args["open-settings"]))
+	var updates := UpdateCheck.new()
+	updates.name = "UpdateCheck"
+	add_child(updates)
+	updates.update_available.connect(hud.show_update)
+	updates.start(String(args.get("fake-latest", "")))
 	if args.has("autopilot"):
 		_autopilot()
 	if args.has("screenshot"):
@@ -132,6 +147,7 @@ func _setup_input() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"sprint": [KEY_SHIFT], "interact": [KEY_E], "rest": [KEY_C],
 		"chat": [KEY_ENTER, KEY_KP_ENTER], "menu": [KEY_ESCAPE], "help": [KEY_F1],
+		"sniff": [KEY_F],
 	}
 	for action in keys:
 		if InputMap.has_action(action):
@@ -231,6 +247,8 @@ func _on_login_failed(reason: String) -> void:
 	Net.disconnect_from_server()
 	_clear_world()
 	hud.show_menu(reason)
+	if reason.begins_with("Versão diferente"):
+		hud.show_update("", GameConfig.RELEASES_PAGE)
 
 
 func _leave() -> void:
@@ -252,6 +270,8 @@ func _clear_world() -> void:
 	my_seq = 0
 	stats = PackedFloat32Array()
 	_my_name = ""
+	_sniff_ready_ms = 0
+	scent_view.clear()
 	hud.set_account("")
 	hud.settings_panel.set_admin(false)
 	hud.settings_panel.set_perks({})
@@ -309,6 +329,8 @@ func _on_welcome(info: Dictionary) -> void:
 	if _args.has("cmd"):
 		for c in String(_args["cmd"]).split(";", false):
 			Net.c_action.rpc_id(1, Net.Action.DEV, c.strip_edges())
+	if _args.has("auto-sniff"):
+		get_tree().create_timer(float(_args["auto-sniff"])).timeout.connect(_sniff)
 
 
 func _on_teleport(seq: int, pos: Vector3, yaw: float) -> void:
@@ -370,6 +392,9 @@ func _on_self_stats(st: PackedFloat32Array) -> void:
 			f |= Net.SF_EAT
 		if st[Net.ST_HEALTH] / maxf(st[Net.ST_MAX_HEALTH], 0.001) < Movement.LIMP_HEALTH:
 			f |= Net.SF_LIMP
+		# Osso quebrado também manca (a velocidade já vem limitada em ST_WALK/ST_SPRINT).
+		if st.size() > Net.ST_FRACTURE and st[Net.ST_FRACTURE] > 0.0:
+			f |= Net.SF_LIMP
 		my_view.flags = f
 
 
@@ -398,6 +423,18 @@ func _on_event(kind: int, a: int, b: int, value: float, text: String) -> void:
 				views[b].flash_damage()
 			if a == my_id:
 				hud.add_message("Acertou: %s (−%d)" % [text, roundi(value)])
+
+
+## Resposta do faro. `ok` false: ainda em recarga (o servidor diz quanto falta).
+func _on_scent(ok: bool, data: PackedFloat32Array, cooldown: float) -> void:
+	_sniff_ready_ms = Time.get_ticks_msec() + int(cooldown * 1000.0)
+	if not ok:
+		hud.add_message("Faro em recarga: %d s" % ceili(cooldown))
+		return
+	if terrain:
+		scent_view.show_scent(data, terrain)
+	if data.is_empty():
+		hud.add_message("Nenhum cheiro por perto.")
 
 
 func _on_died(cause: String) -> void:
@@ -449,6 +486,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_try_attack()
 	elif event.is_action_pressed("rest") and alive:
 		Net.c_action.rpc_id(1, Net.Action.REST_TOGGLE, "")
+	elif event.is_action_pressed("sniff") and alive:
+		_sniff()
 	elif event.is_action_pressed("chat"):
 		hud.open_chat()
 		get_viewport().set_input_as_handled()
@@ -502,6 +541,20 @@ func _on_password_changed(ok: bool, text: String) -> void:
 	_pending_new_key = ""
 
 
+func _sniff() -> void:
+	if not in_game or not alive:
+		return
+	var left := _sniff_seconds_left()
+	if left > 0.0:
+		hud.add_message("Faro em recarga: %d s" % ceili(left))
+		return
+	Net.c_sniff.rpc_id(1)
+
+
+func _sniff_seconds_left() -> float:
+	return maxf(0.0, (_sniff_ready_ms - Time.get_ticks_msec()) / 1000.0)
+
+
 func _try_attack() -> void:
 	if _attack_cd > 0.0 or my_view == null:
 		return
@@ -531,6 +584,7 @@ func _process(delta: float) -> void:
 			flags |= Net.CF_SPRINT
 		Net.c_state.rpc_id(1, my_seq, my_pos, my_yaw, flags)
 	hud.set_prompt(_prompt_text())
+	hud.set_sniff_status(_sniff_seconds_left())
 
 
 func _growth() -> float:

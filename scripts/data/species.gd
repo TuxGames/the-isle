@@ -12,6 +12,7 @@ extends RefCounted
 ##   pra um bicho grande conseguir morder um pequeno no chão.
 ## - Opcionais, pra códigos de resgate (Rewards): "locked": true = só escolhe quem liberou
 ##   a espécie com um código; "beta": true = só escolhe conta com acesso beta. Hoje nenhuma é.
+## - "injury_heal": ritmo em que os ferimentos saram (1 = normal, 2 = o dobro; ver Injuries).
 
 enum Diet { CARNIVORE, HERBIVORE }
 
@@ -25,6 +26,7 @@ const DATA := {
 		"max_health": 1200.0,
 		"damage": 140.0,
 		"grow_minutes": 120.0,
+		"injury_heal": 1.0,
 		# Minutos pra esvaziar o estômago ANDANDO, adulto. Filhote esvazia mais rápido.
 		"hunger_minutes": 40.0,
 		"thirst_minutes": 32.0,
@@ -38,6 +40,8 @@ const DATA := {
 		"juvenile_scale": 0.25,
 		"hip_height": 2.0,
 		"perception_m": 60.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 80.0,
 		# IA: foge quando a vida cai abaixo dessa fração.
 		"flee_health": 0.30,
 		# IA: quanto maior, mais encara inimigos mais fortes.
@@ -70,6 +74,7 @@ const DATA := {
 		"max_health": 2200.0,
 		"damage": 160.0,
 		"grow_minutes": 180.0,
+		"injury_heal": 1.0,
 		"hunger_minutes": 57.0,
 		"thirst_minutes": 45.0,
 		"stomach_fraction": 0.04,
@@ -81,6 +86,8 @@ const DATA := {
 		"juvenile_scale": 0.25,
 		"hip_height": 1.6,
 		"perception_m": 45.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 40.0,
 		"flee_health": 0.20,
 		"courage": 1.6,
 		# Herbívoro que enfrenta o predador em vez de só fugir.
@@ -111,6 +118,7 @@ const DATA := {
 		"max_health": 250.0,
 		"damage": 15.0,
 		"grow_minutes": 60.0,
+		"injury_heal": 1.0,
 		"hunger_minutes": 20.0,
 		"thirst_minutes": 16.0,
 		"stomach_fraction": 0.08,
@@ -122,6 +130,8 @@ const DATA := {
 		"juvenile_scale": 0.3,
 		"hip_height": 1.0,
 		"perception_m": 70.0,
+		# Faro (tecla F): até onde sente pegadas e carcaças, em metros (R).
+		"smell_radius": 60.0,
 		# 1.0 = foge sempre que vê um predador perigoso.
 		"flee_health": 1.0,
 		"courage": 0.3,

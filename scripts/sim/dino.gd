@@ -42,6 +42,9 @@ var brain := {}
 ## dino cresce (Metabolism); vai junto quando o jogador sai e quando morre (WorldSim).
 var growth_boost_s: float = 0.0
 
+## Ferimentos (Injuries): tipo -> segundos que faltam pra sarar. Vão pro save; zeram ao morrer.
+var injuries := {}
+
 ## Simulação por distância (WorldSim.SimTier; não vai pro save, é recalculada todo passo).
 var sim_tier: int = 0
 ## Tempo de mundo acumulado desde a última vez que o dino foi simulado.
@@ -121,6 +124,7 @@ func to_dict() -> Dictionary:
 		"resting": resting,
 		"brain_state": String(brain.get("state", "")),
 		"growth_boost_s": growth_boost_s,
+		"injuries": injuries.duplicate(),
 	}
 
 
@@ -142,4 +146,5 @@ static func from_dict(d: Dictionary) -> Dino:
 	dino.stamina = float(d.get("stamina", 100.0))
 	dino.resting = bool(d.get("resting", false))
 	dino.growth_boost_s = maxf(0.0, float(d.get("growth_boost_s", 0.0)))
+	dino.injuries = Injuries.sanitize(d.get("injuries", {}))
 	return dino

@@ -40,7 +40,11 @@ const ST_RESTING := 9
 const ST_WORLD_TIME := 10
 ## Segundos de boost de crescimento que ainda faltam (código de resgate).
 const ST_GROWTH_BOOST := 11
-const ST_COUNT := 12
+## Ferimentos (Injuries): segundos que faltam pra sarar cada um (0 = não tem).
+const ST_BLEED := 12
+const ST_FRACTURE := 13
+const ST_DEEP := 14
+const ST_COUNT := 15
 
 signal welcome_received(info: Dictionary)
 signal login_failed(reason: String)
@@ -54,6 +58,7 @@ signal message_received(text: String)
 signal password_changed(ok: bool, text: String)
 signal redeem_result(ok: bool, text: String, perks: Dictionary)
 signal staff_codes(codes: Array, created: String, text: String)
+signal scent_received(ok: bool, data: PackedFloat32Array, cooldown: float)
 
 ## GameServer quando este processo é o servidor; null no cliente.
 var server: Node = null
@@ -128,6 +133,13 @@ func c_staff_revoke_code(code: String) -> void:
 		server.on_staff_revoke_code(multiplayer.get_remote_sender_id(), code)
 
 
+## Faro (tecla F). A resposta vem por s_scent.
+@rpc("any_peer", "call_remote", "reliable")
+func c_sniff() -> void:
+	if server:
+		server.on_sniff(multiplayer.get_remote_sender_id())
+
+
 # ============================================================ servidor → cliente
 
 @rpc("authority", "call_remote", "reliable")
@@ -192,6 +204,13 @@ func s_redeem_result(ok: bool, text: String, perks: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_staff_codes(codes: Array, created: String, text: String) -> void:
 	staff_codes.emit(codes, created, text)
+
+
+## Resposta do faro: se farejou (`ok`; false = ainda em recarga), ScentTrail.STRIDE floats por
+## item (x, z, idade, espécie, tipo) e os segundos até poder farejar de novo.
+@rpc("authority", "call_remote", "reliable")
+func s_scent(ok: bool, data: PackedFloat32Array, cooldown: float) -> void:
+	scent_received.emit(ok, data, cooldown)
 
 
 # ============================================================ conexão (cliente)
