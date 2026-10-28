@@ -44,7 +44,18 @@ const ST_GROWTH_BOOST := 11
 const ST_BLEED := 12
 const ST_FRACTURE := 13
 const ST_DEEP := 14
-const ST_COUNT := 15
+## Reprodução (Nests): ovos no meu ninho (-1 = sem ninho), ovo pronto pra mim (0/1), segundos
+## até chocar, segundos até poder fazer postura de novo, ninho sendo feito segurando N (0 a 1;
+## -1 = não está fazendo), segundos pra aceitar um pedido de parceiro (0 = nenhum) e o id do dino
+## de quem pediu.
+const ST_NEST_EGGS := 15
+const ST_NEST_READY := 16
+const ST_NEST_HATCH := 17
+const ST_LAY_COOLDOWN := 18
+const ST_NEST_BUILD := 19
+const ST_MATE_ASK := 20
+const ST_MATE_FROM := 21
+const ST_COUNT := 22
 
 signal welcome_received(info: Dictionary)
 signal login_failed(reason: String)
@@ -59,6 +70,7 @@ signal password_changed(ok: bool, text: String)
 signal redeem_result(ok: bool, text: String, perks: Dictionary)
 signal staff_codes(codes: Array, created: String, text: String)
 signal scent_received(ok: bool, data: PackedFloat32Array, cooldown: float)
+signal nests_received(list: Array, mine: Dictionary)
 
 ## GameServer quando este processo é o servidor; null no cliente.
 var server: Node = null
@@ -140,6 +152,21 @@ func c_sniff() -> void:
 		server.on_sniff(multiplayer.get_remote_sender_id())
 
 
+## Parceiro (tecla R): pede pra fazer a postura no próprio ninho, ou aceita o pedido de outro
+## jogador. As respostas vêm por s_message e s_nests.
+@rpc("any_peer", "call_remote", "reliable")
+func c_mate() -> void:
+	if server:
+		server.on_mate(multiplayer.get_remote_sender_id())
+
+
+## Ninho (tecla N): true ao apertar, false ao soltar. Segurando parado, o servidor faz o ninho.
+@rpc("any_peer", "call_remote", "reliable")
+func c_nest(holding: bool) -> void:
+	if server:
+		server.on_nest(multiplayer.get_remote_sender_id(), holding)
+
+
 # ============================================================ servidor → cliente
 
 @rpc("authority", "call_remote", "reliable")
@@ -211,6 +238,13 @@ func s_staff_codes(codes: Array, created: String, text: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func s_scent(ok: bool, data: PackedFloat32Array, cooldown: float) -> void:
 	scent_received.emit(ok, data, cooldown)
+
+
+## Ninhos (mandado quando algo muda e no login): a lista de todos (Nests.public_list) e o ninho
+## de quem recebe (Nests.mine_of: tem ninho, ovos, ovo pronto pra "Nascer no ninho").
+@rpc("authority", "call_remote", "reliable")
+func s_nests(list: Array, mine: Dictionary) -> void:
+	nests_received.emit(list, mine)
 
 
 # ============================================================ conexão (cliente)

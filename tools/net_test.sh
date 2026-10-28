@@ -10,7 +10,8 @@
 #  6. o servidor reinicia (lê o save e as contas); alguém tenta entrar como bob com a
 #     senha errada e é barrado; o bob volta com a senha certa, ainda igual.
 #  7. bob morre e renasce jovem.
-#     (depois: troca de senha, códigos de resgate e o faro: fred deixa pegadas, gil fareja.)
+#     (depois: troca de senha, códigos de resgate, o faro: fred deixa pegadas, gil fareja;
+#     e a reprodução: hana faz ninho, postura com um bot, choca e nasce no ninho.)
 #  8-10. mapa de 1024 m: o cliente recebe o tamanho; reiniciar sem --map-size mantém o do
 #        save; reiniciar com outro tamanho guarda o save antigo à parte.
 set -u
@@ -65,6 +66,7 @@ client admin_cria --out="$TMP/codigo.txt" || FAILS=$((FAILS+1))   # Tux (admin) 
 client resgata --code-file="$TMP/codigo.txt" || FAILS=$((FAILS+1)) # eva resgata uma vez só
 client rastro || FAILS=$((FAILS+1))   # fred anda 30 m e sai (as pegadas ficam)
 client fareja || FAILS=$((FAILS+1))   # gil fareja: vê as pegadas do fred, não as próprias; recarga
+client ninho || FAILS=$((FAILS+1))    # hana: ninho (N), postura com bot (R), ovos, choco e nasce no ninho
 stop_server
 
 # Mapa de outro tamanho, num save à parte:

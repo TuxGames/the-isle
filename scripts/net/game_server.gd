@@ -104,6 +104,7 @@ func _process(delta: float) -> void:
 		_sim_accum -= step
 		sim.step(step)
 		_flush_events()
+	_flush_nests()
 
 	_snap_accum += delta
 	if _snap_accum >= 1.0 / GameConfig.SNAPSHOT_HZ:
@@ -213,6 +214,7 @@ func on_login(peer_id: int, player_name: String, species_id: String, version: St
 
 	Net.s_welcome.rpc_id(peer_id, _welcome_info(dino, restored, player_name, created))
 	Net.s_teleport.rpc_id(peer_id, dino.client_seq, dino.pos, dino.yaw)
+	Net.s_nests.rpc_id(peer_id, sim.nests.public_list(), sim.nests.mine_of(player_name))
 	_broadcast_message("%s entrou no servidor" % player_name)
 	_roster_dirty = true
 
@@ -305,6 +307,21 @@ func on_sniff(peer_id: int) -> void:
 		return
 	var r := sim.sniff(d)
 	Net.s_scent.rpc_id(peer_id, bool(r["ok"]), r["data"], float(r["wait"]))
+
+
+## Ninho (tecla N) e parceiro (tecla R): a regra fica em sim/nests.gd; aqui só repassa.
+func on_nest(peer_id: int, holding: bool) -> void:
+	var d := _dino_for_peer(peer_id)
+	if d != null and d.alive:
+		sim.nests.set_building(sim, d, holding)
+		_flush_nests()
+
+
+func on_mate(peer_id: int) -> void:
+	var d := _dino_for_peer(peer_id)
+	if d != null and d.alive:
+		sim.nests.press_mate(sim, d)
+		_flush_nests()
 
 
 func on_staff_list_codes(peer_id: int) -> void:
@@ -432,13 +449,22 @@ func on_action(peer_id: int, action: int, arg: String) -> void:
 
 func _respawn(peer_id: int, species_id: String) -> void:
 	var player_name: String = peers[peer_id]["name"]
-	var locked := Species.choice_error(species_id, accounts.perks(player_name))
-	if locked != "":
-		Net.s_message.rpc_id(peer_id, locked)
-		return
-	var d := sim.respawn_player(player_name, species_id)
+	var d: Dino
+	if species_id == Nests.RESPAWN_ARG:
+		# "Nascer no ninho": filhote em cima do ovo pronto do próprio ninho.
+		d = sim.nests.respawn_in_nest(sim, player_name)
+		if d == null:
+			Net.s_message.rpc_id(peer_id, "Seu ninho não tem ovo pronto.")
+			return
+	else:
+		var locked := Species.choice_error(species_id, accounts.perks(player_name))
+		if locked != "":
+			Net.s_message.rpc_id(peer_id, locked)
+			return
+		d = sim.respawn_player(player_name, species_id)
 	peers[peer_id]["dino_id"] = d.id
-	_log("[login] %s renasceu como %s jovem" % [player_name, Species.display_name(d.species)])
+	_log("[login] %s renasceu como %s jovem%s" % [player_name, Species.display_name(d.species),
+			" no ninho" if species_id == Nests.RESPAWN_ARG else ""])
 	Net.s_welcome.rpc_id(peer_id, _welcome_info(d, false, player_name, false))
 	Net.s_teleport.rpc_id(peer_id, d.client_seq, d.pos, d.yaw)
 	_roster_dirty = true
@@ -518,13 +544,55 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 					b.pos = Vector3(p.x, Movement.ground_y(sim.terrain, p.x, p.z, b.body_height()), p.z)
 					b.yaw = d.yaw + PI
 					reply = "%s criado na sua frente" % Species.display_name(sp_id)
+			"/nest", "/eggs", "/hatch":
+				reply = _dev_nest(d, cmd, parts)
 			_:
-				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /hurt tipo [s], /kill, /bots, /spawn especie [crescimento]"
+				reply = "Comandos: /grow 0-1, /tp x z [yaw], /hp 0-100, /food fome sede, /hurt tipo [s], /kill, /bots, /spawn especie [crescimento], /nest [x z], /eggs N, /hatch [todos]"
 	if reply != "":
 		Net.s_message.rpc_id(peer_id, reply)
 
 
+## Reprodução sem esperar (testes e prints): /nest [x z] faz o ninho na hora, sem as regras;
+## /eggs N põe N ovos chocando no seu ninho; /hatch choca agora (o seu, ou todos com "todos").
+func _dev_nest(d: Dino, cmd: String, parts: PackedStringArray) -> String:
+	match cmd:
+		"/nest":
+			var at := d.pos
+			if parts.size() >= 3:
+				at = sim.terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
+			var nest := sim.nests.build(sim, d.player_name, d.species, at)
+			var p: Vector3 = nest["pos"]
+			return "Ninho criado em %d, %d" % [roundi(p.x), roundi(p.z)]
+		"/eggs":
+			var n := int(parts[1]) if parts.size() > 1 else int(d.spec().get("clutch", 2))
+			return "%d ovo(s) chocando no seu ninho" % sim.nests.dev_eggs(sim, d, n)
+		_:
+			var all := parts.size() > 1 and parts[1].to_lower() == "todos"
+			return "Chocaram %d ovo(s)" % sim.nests.hatch_now(sim, "*" if all else d.player_name)
+
+
 # ---------------------------------------------------------------- saída pros clientes
+
+## Avisos da reprodução pra cada jogador e, se os ninhos mudaram, o s_nests pra todo mundo.
+func _flush_nests() -> void:
+	for m in sim.nests.messages:
+		var pid := _peer_for_name(String(m[0]))
+		if pid != 0:
+			Net.s_message.rpc_id(pid, String(m[1]))
+	sim.nests.messages.clear()
+	if sim.nests.dirty:
+		sim.nests.dirty = false
+		var list := sim.nests.public_list()
+		for pid in peers:
+			Net.s_nests.rpc_id(pid, list, sim.nests.mine_of(String(peers[pid]["name"])))
+
+
+func _peer_for_name(player_name: String) -> int:
+	for pid in peers:
+		if String(peers[pid]["name"]) == player_name:
+			return pid
+	return 0
+
 
 func _flush_events() -> void:
 	for ev in sim.events:
@@ -629,6 +697,14 @@ func _send_self_stats() -> void:
 		st[Net.ST_BLEED] = Injuries.remaining(d, Injuries.BLEED)
 		st[Net.ST_FRACTURE] = Injuries.remaining(d, Injuries.FRACTURE)
 		st[Net.ST_DEEP] = Injuries.remaining(d, Injuries.DEEP)
+		var ns := sim.nests.status_of(sim, d)
+		st[Net.ST_NEST_EGGS] = ns["eggs"]
+		st[Net.ST_NEST_READY] = ns["ready"]
+		st[Net.ST_NEST_HATCH] = ns["hatch"]
+		st[Net.ST_LAY_COOLDOWN] = ns["cooldown"]
+		st[Net.ST_NEST_BUILD] = ns["build"]
+		st[Net.ST_MATE_ASK] = ns["ask"]
+		st[Net.ST_MATE_FROM] = ns["ask_from"]
 		Net.s_self_stats.rpc_id(pid, st)
 
 

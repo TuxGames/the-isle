@@ -24,6 +24,9 @@ extends Node
 ##   fareja      entra como gil (carnotaurus), vai pra perto do caminho do fred, anda um pouco,
 ##               fareja (F): recebe as pegadas do fred e não as próprias; farejar de novo logo
 ##               em seguida dá "em recarga".
+##   ninho       entra como hana (dryosaurus), vira adulta, faz o ninho segurando N (c_nest),
+##               faz postura com um bot (/spawn + R), recebe os ovos (s_nests), choca (/hatch),
+##               morre e nasce no ninho como filhote ("Nascer no ninho").
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -98,6 +101,8 @@ func _on_connected() -> void:
 		pname = "Tux"
 	elif role == "resgata":
 		pname = "eva"
+	elif role == "ninho":
+		pname = "hana"
 	var password := "chute-errado" if role == "intruso" else "senha-" + pname
 	if role == "dani_nova":
 		password = "nova-dani"
@@ -128,6 +133,8 @@ func _on_connected() -> void:
 			_rastro()
 		"fareja":
 			_fareja()
+		"ninho":
+			_ninho()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -504,3 +511,122 @@ func _fareja() -> void:
 	_check(not bool(answers[1][0]) and float(answers[1][2]) > GameConfig.SNIFF_COOLDOWN_S - 5.0,
 			"logo depois: em recarga (%.0f s)" % float(answers[1][2]))
 	_finish()
+
+
+## Reprodução (design, seção 8) pelo caminho de rede de verdade: N segurado (c_nest), R (c_mate),
+## ovos no s_nests, choco, morte e "Nascer no ninho" (Action.RESPAWN com "nest").
+func _ninho() -> void:
+	var lists: Array = []
+	Net.nests_received.connect(func(list, mine): lists.append([list, mine]))
+	if not await _wait_for(func(): return stats.size() >= Net.ST_COUNT and my_seq > 0 and not welcome.is_empty(), 10.0):
+		_fail("não recebeu os próprios status")
+		return _finish()
+	_check(await _wait_for(func(): return not lists.is_empty(), 3.0), "recebeu os ninhos no login")
+	_check(int(stats[Net.ST_NEST_EGGS]) == -1, "começa sem ninho")
+	_dev("/grow 1")
+	_dev("/food 100 100")
+	var spot := _flat_spot()
+	if not await _teleport(int(spot.x), int(spot.z)):
+		_fail("/tp não chegou")
+		return _finish()
+	await _wait_for(func(): return stats[Net.ST_GROWTH] > 0.99, 3.0)
+
+	# Ninho: segura N parado; o servidor conta os 8 s.
+	Net.c_nest.rpc_id(1, true)
+	_check(await _wait_for(func(): return stats[Net.ST_NEST_BUILD] > 0.2, 4.0),
+			"segurando N: o progresso aparece (%.0f%%)" % (stats[Net.ST_NEST_BUILD] * 100.0))
+	var built := await _wait_for(func(): return int(stats[Net.ST_NEST_EGGS]) == 0, GameConfig.NEST_BUILD_S + 3.0)
+	Net.c_nest.rpc_id(1, false)
+	_check(built, "ninho pronto depois de 8 s parado")
+	var mine := func() -> Dictionary:
+		for n in (lists[-1][0] if not lists.is_empty() else []):
+			if n["owner"] == "hana":
+				return n
+		return {}
+	_check(await _wait_for(func(): return not mine.call().is_empty(), 2.0), "o ninho chegou no s_nests")
+	if not built:
+		return _finish()
+	var nest_pos: Vector3 = mine.call()["pos"]
+
+	# Parceiro: um dryosaurus adulto (bot) do lado; R faz a postura.
+	var known := entities.keys()
+	_dev("/spawn dryosaurus 1")
+	var dryo := Species.index_of("dryosaurus")
+	var find_bot := func() -> int:
+		for id in entities:
+			var e: Array = entities[id]
+			if not known.has(id) and id != my_id and e[3] == dryo and (int(e[2]) & Net.SF_PLAYER) == 0 and e[4] > 0.99:
+				return id
+		return 0
+	if not await _wait_for(func(): return find_bot.call() != 0, 5.0):
+		_fail("o bot do /spawn não apareceu")
+		return _finish()
+	var bot_id: int = find_bot.call()
+	var laid := false
+	for attempt in 4:
+		# O bot passeia: chega do lado dele (a ~2 m) logo antes de apertar R.
+		var bp: Vector3 = entities[bot_id][0]
+		var dir := Vector3(nest_pos.x - bp.x, 0, nest_pos.z - bp.z).normalized()
+		my_pos = bp + dir * 2.0
+		await _wait(0.25)
+		Net.c_mate.rpc_id(1)
+		laid = await _wait_for(func(): return int(stats[Net.ST_NEST_EGGS]) == 4, 2.0)
+		if laid:
+			break
+	_check(laid, "postura com o bot: 4 ovos no ninho (%d)" % int(stats[Net.ST_NEST_EGGS]))
+	_check(stats[Net.ST_LAY_COOLDOWN] > GameConfig.LAY_COOLDOWN_S - 60.0, "recarga da postura no HUD (%.0f s)" % stats[Net.ST_LAY_COOLDOWN])
+	_check(stats[Net.ST_NEST_HATCH] > GameConfig.INCUBATION_S - 60.0, "chocam em 20 min (%.0f s)" % stats[Net.ST_NEST_HATCH])
+	_check(await _wait_for(func(): return Array(mine.call().get("eggs", [])).size() == 4, 2.0), "o cliente recebeu os 4 ovos")
+	if not laid:
+		return _finish()
+
+	# Choca agora: 1 ovo fica pronto pra hana, os outros 3 viram bots filhotes.
+	var before := entities.keys()
+	_dev("/hatch")
+	_check(await _wait_for(func(): return Array(mine.call().get("eggs", [])).size() == 1 \
+			and Array(mine.call().get("ready", [])).size() == 1, 3.0), "chocou: sobrou 1 ovo pronto pra ela")
+	var babies := func() -> int:
+		var n := 0
+		for id in entities:
+			var e: Array = entities[id]
+			if not before.has(id) and e[3] == dryo and absf(e[4] - GameConfig.HATCHLING_GROWTH) < 0.01:
+				n += 1
+		return n
+	_check(await _wait_for(func(): return babies.call() == 3, 2.0), "3 filhotes nasceram como bots (%d)" % babies.call())
+	_check(bool(lists[-1][1].get("ready", false)), "o servidor avisa que tem ovo pronto pra ela")
+
+	# Morre e nasce no ninho, filhote.
+	_dev("/kill")
+	if not await _wait_for(func(): return died_cause != "", 5.0):
+		_fail("não morreu")
+		return _finish()
+	welcome = {}
+	stats = PackedFloat32Array()
+	Net.c_action.rpc_id(1, Net.Action.RESPAWN, Nests.RESPAWN_ARG)
+	var back := await _wait_for(func(): return not welcome.is_empty() and stats.size() > 0, 5.0)
+	_check(back, "nasceu no ninho")
+	if back:
+		await _wait(0.3)
+		_check(welcome["species"] == "dryosaurus", "da espécie do ninho")
+		_check(absf(stats[Net.ST_GROWTH] - GameConfig.PLAYER_START_GROWTH) < 0.01, "filhote (crescimento %.2f)" % stats[Net.ST_GROWTH])
+		_check(Movement.flat_distance(my_pos, nest_pos) < Nests.NEST_RADIUS_M + 0.2,
+				"em cima do ninho (%.1f m)" % Movement.flat_distance(my_pos, nest_pos))
+		_check(await _wait_for(func(): return mine.call().is_empty(), 2.0), "sem ovos, o ninho sumiu")
+	_finish()
+
+
+## Lugar plano em terra firme (o mesmo terreno do servidor), com folga em volta.
+func _flat_spot() -> Vector3:
+	var ter := Terrain.get_shared(int(welcome["seed"]), float(welcome["map_size"]))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 2000:
+		var p := ter.random_land_point(rng)
+		p = Vector3(roundi(p.x), 0.0, roundi(p.z))
+		var ok := true
+		for off in [Vector3.ZERO, Vector3(12, 0, 0), Vector3(-12, 0, 0), Vector3(0, 0, 12), Vector3(0, 0, -12)]:
+			if Nests.spot_error(ter, p + off) != "":
+				ok = false
+		if ok:
+			return p
+	return Vector3(300, 0, 300)
