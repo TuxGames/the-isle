@@ -50,13 +50,35 @@ Extras (pedidos do Tux):
 
 ## v0.4: reprodução
 
-- Parceiro (bot ou jogador, R), ninho, ovos, filhotes; comer ovos de outros ninhos.
+- ✅ Reprodução (R, design seção 8): ninho segurando **N** (adulto, alimentado, sem sangrar,
+  parado 8 s em chão firme), parceiro com **R** (bot aceita ou recusa; jogador tem 15 s pra
+  confirmar), postura de 2 a 4 ovos por espécie, recarga de 2 h, incubação de 20 min de mundo.
+  Um ovo fica pronto pro dono ("Nascer no ninho" na tela de morte, como filhote); os outros
+  viram bots filhotes (até 100 bots). Carnívoro come ovo (jogador e bot com fome); 25% das
+  reposições de bot viram ninho de bot. Ninhos no save (formato 5); `/nest`, `/eggs`, `/hatch` (dev).
 
 ## v0.5: clima e estações
 
-- Calendário 9X/X, ciclo de ~80 h jogadas, neve por altitude, seca, rios que encolhem,
-  raio só em bots.
-- Dia e noite (R): dia de 1 h jogada (40 min claro + 20 min de noite); neve derrete aos poucos (R).
+O clima é calculado da semente do mapa + tempo do mundo (servidor e jogadores chegam no mesmo
+resultado): sem mensagem nova na rede, sem mudar o save, e para junto com o mundo. Números (R)
+em `config.gd`, seção "Clima" (design, seção 11).
+
+- ✅ Calendário (R): ano de 80 h jogadas (primavera 14 h, verão 42 h, outono 12 h, inverno 12 h:
+  9X/2X) e dia de 1 h (40 min claro + 20 min de noite, amanhecer e entardecer suaves). HUD:
+  "Dia N · Estação · hh:mm" e o tempo.
+- ✅ Tempo: limpo, nublado, chuva, tempestade, neve e nevasca, em blocos de 20 min sorteados pela
+  semente, com chances por estação. Chuva e neve como partículas, céu fechado, noite com lua.
+- ✅ Neve por altitude: neve fraca desce a linha de neve até os morros, nevasca neva em tudo
+  (baixadas menos), derrete em 2 h (R). Terreno e arbustos ficam brancos no shader.
+- ✅ Inverno (R): fome x1,3, corrida x0,85 na neve, água congela (a baixada nunca), bots caçam com
+  menos vontade e a população-alvo cai pra 80% (sem matar ninguém).
+- ✅ Verão (R): arbustos rebrotam 50% mais rápido e a reposição mira 70% de herbívoros.
+- ✅ Seca (R): metade dos anos, nas últimas 6 h do verão; o rio cai pra 60% da largura (sim e
+  desenho). O mapa só tem o rio, então não há água pequena pra secar.
+- ✅ Chuva forte e seca reduzem a rebrota. Raio só em tempestade e só mata bot (testado).
+- ✅ Comandos de dev: `/time`, `/weather`, `/clima`, `/raio`.
+- ⬜ Depois: som (chuva, trovão, vento), nuvens de verdade no céu, poças e lagos (pra seca ter
+  "rio pequeno" que some), pegadas na neve.
 
 ## Paralelo (Marcelo)
 

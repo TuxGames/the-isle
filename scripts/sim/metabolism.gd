@@ -46,7 +46,8 @@ static func hunger_per_second(d: Dino) -> float:
 	rate *= activity(d)
 	if d.growth < 1.0:
 		rate *= GROWING_HUNGER_MULT
-	return rate
+	# Inverno: mais fome (Climate.apply).
+	return rate * d.climate_hunger_mult
 
 
 static func thirst_per_second(d: Dino) -> float:

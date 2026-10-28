@@ -7,9 +7,11 @@ extends RefCounted
 ## 1: v0.1 (sem tamanho do mapa, sempre 512 m). 2: grava "map_size".
 ## 3: os dinos têm growth_boost_s (save antigo sem o campo vale 0).
 ## 4: os dinos têm "injuries" (save antigo = sem ferimentos).
-const SAVE_FORMAT := 4
+## 5: "nests" (ninhos, ovos e recarga da postura; save antigo = sem ninhos).
+const SAVE_FORMAT := 5
 
-enum Ev { ATTACK = 1, HIT = 2, DEATH = 3 }
+## LIGHTNING e WEATHER (clima, sim/climate.gd) começam no 10 pra deixar espaço pra outros eventos.
+enum Ev { ATTACK = 1, HIT = 2, DEATH = 3, LIGHTNING = 10, WEATHER = 11 }
 ## Faixas da simulação por distância (ver _update_sim_tiers).
 enum SimTier { FULL, REDUCED, FROZEN }
 
@@ -44,8 +46,14 @@ var lingering := {}
 var director := PopulationDirector.new()
 ## Pegadas pro faro (design, seção 10).
 var scent := ScentTrail.new()
+## Clima, estações e dia/noite (design, seção 11): função da semente + world_time.
+var climate: Climate
+## Nível do rio neste passo (baixa na seca). Atualizado por Climate.apply.
+var water_level: float = Terrain.WATER_LEVEL
 ## Quando cada jogador pode farejar de novo (nome -> world_time).
 var _sniff_ready := {}
+## Ninhos, ovos e parceiro (design, seção 8; ver sim/nests.gd).
+var nests := Nests.new()
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
 var pending_attacks: Array = []
 ## Eventos do último passo, lidos e limpos pelo servidor.
@@ -53,11 +61,14 @@ var events: Array = []
 
 var _grid := {}
 var _step_index := 0
+## Alvo de bots no último passo (pra ver quando ele sobe com a estação). -1 = ainda não viu.
+var _respawn_target_seen := -1
 
 
 func _init(p_seed: int = GameConfig.WORLD_SEED, p_bot_target: int = GameConfig.DEFAULT_BOT_TARGET,
 		p_map_size: float = GameConfig.DEFAULT_MAP_SIZE) -> void:
 	terrain = Terrain.get_shared(p_seed, p_map_size)
+	climate = Climate.new(p_seed, terrain)
 	rng.seed = p_seed * 31 + 7
 	bot_target = clampi(p_bot_target, 0, GameConfig.BOT_MAX)
 	bush_food.resize(terrain.bushes.size())
@@ -166,7 +177,9 @@ func can_drink(d: Dino) -> bool:
 	var m := mouth_point(d)
 	var mid := d.pos.lerp(m, 0.5)
 	var ahead := m + d.forward() * (MOUTH_REACH * d.scale())
-	return terrain.is_water(m.x, m.z) or terrain.is_water(mid.x, mid.z) or terrain.is_water(ahead.x, ahead.z)
+	# Água congelada (inverno) ou que secou (seca) não serve (Climate.is_drinkable).
+	return climate.is_drinkable(m.x, m.z, world_time) or climate.is_drinkable(mid.x, mid.z, world_time) \
+			or climate.is_drinkable(ahead.x, ahead.z, world_time)
 
 
 ## Carcaça com carne ao alcance da boca, ou {}.
@@ -230,6 +243,7 @@ func step(dt: float) -> void:
 	world_time += dt
 	_step_index += 1
 	_update_sim_tiers(dt)
+	climate.apply(self)
 	_rebuild_grid()
 
 	for d: Dino in dinos.values():
@@ -263,7 +277,9 @@ func step(dt: float) -> void:
 	_update_carcasses(dt)
 	_regrow_bushes(dt)
 	_process_respawns()
+	nests.step(self, dt)
 	director.update(self, dt)
+	climate.lightning(self)
 	_finish_lingering()
 	scent.record(self)
 
@@ -316,10 +332,14 @@ func _interact(d: Dino, dt: float) -> void:
 	var want_eat := false
 	var carcass := {}
 	var bush := -1
+	var egg := {}
 	if d.hunger < 99.5:
 		if d.is_carnivore():
 			carcass = carcass_in_reach(d)
-			want_eat = not carcass.is_empty()
+			# Sem carcaça na boca, ovo (Nests): só carnívoro come ovo.
+			if carcass.is_empty():
+				egg = nests.egg_in_reach(self, d)
+			want_eat = not carcass.is_empty() or not egg.is_empty()
 		else:
 			bush = bush_in_reach(d)
 			want_eat = bush != -1
@@ -327,7 +347,9 @@ func _interact(d: Dino, dt: float) -> void:
 		Metabolism.drink(d, dt)
 		result = 2
 	elif want_eat:
-		if d.is_carnivore():
+		if not egg.is_empty():
+			nests.eat_egg(self, d, egg, dt)
+		elif d.is_carnivore():
 			carcass["meat"] -= Metabolism.eat(d, carcass["meat"], dt)
 		else:
 			bush_food[bush] -= Metabolism.eat(d, bush_food[bush], dt)
@@ -360,7 +382,7 @@ func _separate_bots() -> void:
 			b.pos.x += push.x
 			b.pos.z += push.y
 			b.pos = terrain.clamp_to_play_area(b.pos)
-			b.pos.y = Movement.ground_y(terrain, b.pos.x, b.pos.z, b.body_height())
+			b.pos.y = Movement.ground_y(terrain, b.pos.x, b.pos.z, b.body_height(), water_level)
 
 
 # ---------------------------------------------------------------- combate
@@ -441,7 +463,7 @@ func _update_carcasses(_dt: float) -> void:
 
 
 func _regrow_bushes(dt: float) -> void:
-	var grow := BUSH_MAX_KG / BUSH_REGROW_S * dt
+	var grow := BUSH_MAX_KG / BUSH_REGROW_S * dt * climate.regrow_mult(world_time)
 	for i in bush_food.size():
 		if bush_food[i] < BUSH_MAX_KG:
 			bush_food[i] = minf(BUSH_MAX_KG, bush_food[i] + grow)
@@ -460,7 +482,7 @@ func choose_bot_species(need: String = "") -> String:
 			total += 1
 			if not d.is_carnivore():
 				herb += 1
-	var as_herb := herb < roundi((total + 1) * GameConfig.HERBIVORE_SHARE)
+	var as_herb := herb < roundi((total + 1) * herbivore_share())
 	if need != "":
 		var share := float(herb + int(need == "herb")) / (total + 1)
 		if absf(share - GameConfig.HERBIVORE_SHARE) <= GameConfig.DIRECTOR_SHARE_TOLERANCE:
@@ -475,7 +497,8 @@ func spawn_bot(species_id: String = "", growth: float = -1.0) -> Dino:
 	if species_id == "":
 		species_id = choose_bot_species(String(plan.get("need", "")))
 	if growth < 0.0:
-		growth = rng.randf_range(0.45, 1.0)
+		# Parte já nasce adulta (pode ser parceiro na reprodução): ver BOT_SPAWN_GROWTH_MAX.
+		growth = minf(1.0, rng.randf_range(GameConfig.BOT_SPAWN_GROWTH_MIN, GameConfig.BOT_SPAWN_GROWTH_MAX))
 	var pos: Vector3 = plan["pos"] if plan.has("pos") else _bot_spawn_point()
 	var d := Dino.create(new_id(), species_id, growth, pos)
 	d.is_bot = true
@@ -494,19 +517,26 @@ func populate() -> void:
 
 
 func _process_respawns() -> void:
+	# O alvo subiu (o inverno acabou): repõe os que faltam, 30 s depois, fora da vista.
+	var target := effective_bot_target()
+	if _respawn_target_seen >= 0 and target > _respawn_target_seen and respawn_queue.is_empty():
+		for i in maxi(0, target - bot_count() - nests.bot_slots()):
+			respawn_queue.append(world_time + GameConfig.BOT_RESPAWN_DELAY_S)
+	_respawn_target_seen = target
 	if respawn_queue.is_empty():
 		return
 	var still := []
 	for due in respawn_queue:
 		if world_time >= due:
-			if bot_count() < bot_target:
+			# Ninho de bot com ovos vale um bot; parte das reposições vira ninho (Nests).
+			if bot_count() + nests.bot_slots() < effective_bot_target() and not nests.try_bot_nest(self):
 				spawn_bot()
 		else:
 			still.append(due)
 	respawn_queue = still
 	# Garante a reposição mesmo se a fila se perder (ex.: save antigo).
-	if respawn_queue.is_empty() and bot_count() < bot_target:
-		var missing := bot_target - bot_count()
+	if respawn_queue.is_empty() and bot_count() + nests.bot_slots() < effective_bot_target():
+		var missing := effective_bot_target() - bot_count() - nests.bot_slots()
 		for i in missing:
 			respawn_queue.append(world_time + GameConfig.BOT_RESPAWN_DELAY_S)
 
@@ -724,6 +754,7 @@ func to_save() -> Dictionary:
 		"next_id": next_id,
 		"bots": bot_list,
 		"carcasses": carc,
+		"nests": nests.to_save(),
 		"bush_food": Array(bush_food),
 		"players": player_records.duplicate(true),
 		"respawn_queue": respawn_queue.duplicate(),
@@ -749,6 +780,7 @@ func save_mismatch(data: Dictionary) -> String:
 ## Confira antes com save_mismatch. Formato 1 (v0.1) lê igual: só não tinha "map_size".
 ## Formato 2 lê igual: os dinos só não tinham "growth_boost_s" (Dino.from_dict usa 0).
 ## Formato 3 lê igual: os dinos só não tinham "injuries" (Dino.from_dict deixa sem ferimentos).
+## Formato 4 lê igual: só não tinha "nests" (Nests.load_save deixa o mundo sem ninhos).
 func load_save(data: Dictionary) -> void:
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))
@@ -768,6 +800,8 @@ func load_save(data: Dictionary) -> void:
 		cc["id"] = int(cc["id"])
 		carcasses[cc["id"]] = cc
 		next_id = maxi(next_id, cc["id"] + 1)
+	# Formato 4 e antes não tinham ninhos: o mundo carrega sem nenhum (os dinos vêm iguais).
+	nests.load_save(self, data.get("nests", {}))
 	var bf: Array = data.get("bush_food", [])
 	if bf.size() == bush_food.size():
 		for i in bf.size():
@@ -776,3 +810,25 @@ func load_save(data: Dictionary) -> void:
 	respawn_queue = []
 	for t in data.get("respawn_queue", []):
 		respawn_queue.append(float(t))
+
+
+# ---------------------------------------------------------------- clima (sim/climate.gd)
+
+## População-alvo de bots agora (no inverno é menor; ninguém morre por isso, só repõe menos).
+func effective_bot_target() -> int:
+	return climate.bot_target(bot_target, world_time)
+
+
+## Fração de herbívoros que a reposição busca agora (no verão sobe um pouco).
+func herbivore_share() -> float:
+	return climate.herbivore_share(world_time)
+
+
+## Fome abaixo da qual um bot carnívoro sai pra caçar (no inverno, mais baixa).
+func hunt_hunger_start(normal: float) -> float:
+	return climate.hunt_hunger_start(normal, world_time)
+
+
+## Onde beber mais perto de `from`: pula a água congelada e, na seca, fica no rio mais estreito.
+func nearest_water_point(from: Vector3) -> Vector3:
+	return climate.nearest_open_water(from, world_time)

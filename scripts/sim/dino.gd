@@ -50,6 +50,11 @@ var sim_tier: int = 0
 ## Tempo de mundo acumulado desde a última vez que o dino foi simulado.
 var sim_dt: float = 0.0
 
+## Clima (Climate.apply, todo passo; não vai pro save): fome a mais no inverno e corrida mais
+## lenta na neve.
+var climate_hunger_mult: float = 1.0
+var climate_sprint_mult: float = 1.0
+
 
 static func create(p_id: int, p_species: String, p_growth: float, p_pos: Vector3) -> Dino:
 	var d := Dino.new()

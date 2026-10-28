@@ -13,6 +13,7 @@ extends RefCounted
 ## - Opcionais, pra códigos de resgate (Rewards): "locked": true = só escolhe quem liberou
 ##   a espécie com um código; "beta": true = só escolhe conta com acesso beta. Hoje nenhuma é.
 ## - "injury_heal": ritmo em que os ferimentos saram (1 = normal, 2 = o dobro; ver Injuries).
+## - "clutch": ovos por postura; "egg_kg": comida que um ovo dá pra quem come (ver sim/nests.gd).
 
 enum Diet { CARNIVORE, HERBIVORE }
 
@@ -27,6 +28,9 @@ const DATA := {
 		"damage": 140.0,
 		"grow_minutes": 120.0,
 		"injury_heal": 1.0,
+		# Reprodução (R): ovos por postura e comida que cada ovo dá pra quem come, em kg.
+		"clutch": 3,
+		"egg_kg": 6.0,
 		# Minutos pra esvaziar o estômago ANDANDO, adulto. Filhote esvazia mais rápido.
 		"hunger_minutes": 40.0,
 		"thirst_minutes": 32.0,
@@ -75,6 +79,9 @@ const DATA := {
 		"damage": 160.0,
 		"grow_minutes": 180.0,
 		"injury_heal": 1.0,
+		# Reprodução (R): ovos por postura e comida que cada ovo dá pra quem come, em kg.
+		"clutch": 2,
+		"egg_kg": 10.0,
 		"hunger_minutes": 57.0,
 		"thirst_minutes": 45.0,
 		"stomach_fraction": 0.04,
@@ -119,6 +126,9 @@ const DATA := {
 		"damage": 15.0,
 		"grow_minutes": 60.0,
 		"injury_heal": 1.0,
+		# Reprodução (R): ovos por postura e comida que cada ovo dá pra quem come, em kg.
+		"clutch": 4,
+		"egg_kg": 3.0,
 		"hunger_minutes": 20.0,
 		"thirst_minutes": 16.0,
 		"stomach_fraction": 0.08,

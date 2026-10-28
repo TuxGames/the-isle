@@ -30,12 +30,20 @@ var _update_label: Label
 var _update_url := ""
 var _death_species: OptionButton
 var _death_label: Label
+## "Nascer no ninho" (tela de morte): só aparece com ovo pronto no próprio ninho.
+var _nest_button: Button
+## Ninho e recarga da postura ("Ninho: 3 ovos · chocam em 12:30"); some sem ninho.
+var _nest_label: Label
+## Pedido de parceiro de outro jogador (centro, em cima).
+var _mate_label: Label
 
 var _bars := {}
 var _species_label: Label
 ## Ferimentos com o tempo que falta ("Sangrando 2:10 · Osso quebrado 8:40"); some sem ferimento.
 var _injury_label: Label
 var _clock_label: Label
+## Tempo (limpo, chuva, neve...), calculado pelo WeatherView.
+var _weather_label: Label
 var _roster_label: Label
 var _sniff_label: Label
 var _prompt_label: Label
@@ -188,6 +196,10 @@ func _build_game() -> void:
 	_injury_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_injury_label.visible = false
 	sbox.add_child(_injury_label)
+	_nest_label = _label("", 14, Color(0.95, 0.82, 0.55))
+	_nest_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_nest_label.visible = false
+	sbox.add_child(_nest_label)
 	for key in [["health", "Vida", Color(0.8, 0.2, 0.18)], ["hunger", "Comida", Color(0.85, 0.55, 0.2)],
 			["thirst", "Água", Color(0.25, 0.55, 0.9)], ["stamina", "Fôlego", Color(0.9, 0.85, 0.3)],
 			["growth", "Crescimento", Color(0.45, 0.75, 0.35)]]:
@@ -203,6 +215,8 @@ func _build_game() -> void:
 	info.add_child(ibox)
 	_clock_label = _label("", 14)
 	ibox.add_child(_clock_label)
+	_weather_label = _label("", 14, Color(0.75, 0.85, 0.95))
+	ibox.add_child(_weather_label)
 	_roster_label = _label("", 14, Color(0.85, 0.9, 0.8))
 	ibox.add_child(_roster_label)
 	_sniff_label = _label("", 14, Color(1.0, 0.86, 0.35))
@@ -222,13 +236,21 @@ func _build_game() -> void:
 	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game.add_child(_prompt_label)
 
+	# Pedido de parceiro (centro, em cima)
+	_mate_label = _label("", 20, Color(1.0, 0.85, 0.5))
+	_mate_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_mate_label.position = Vector2(-300, 70)
+	_mate_label.custom_minimum_size = Vector2(600, 0)
+	_mate_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game.add_child(_mate_label)
+
 	# Mira (ponto no centro)
 	var dot := _label("·", 28, Color(1, 1, 1, 0.6))
 	dot.set_anchors_preset(Control.PRESET_CENTER)
 	dot.position = Vector2(-4, -22)
 	game.add_child(dot)
 
-	_help = _label("WASD andar · Shift correr · Clique morder · E (segurar) comer/beber · C descansar\nF faro · Enter chat/comandos · F1 esconder ajuda · Esc menu", 13, Color(0.9, 0.9, 0.85, 0.85))
+	_help = _label("WASD andar · Shift correr · Clique morder · E (segurar) comer/beber · C descansar\nF faro · N (segurar) ninho · R parceiro · Enter chat · F1 ajuda · Esc menu", 13, Color(0.9, 0.9, 0.85, 0.85))
 	_help.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_help.position = Vector2(-560, -58)
 	_help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -295,6 +317,12 @@ func _build_death() -> void:
 	b.custom_minimum_size = Vector2(0, 40)
 	b.pressed.connect(func(): respawn_requested.emit(_selected_species(_death_species)))
 	box.add_child(b)
+	_nest_button = Button.new()
+	_nest_button.text = "Nascer no ninho"
+	_nest_button.custom_minimum_size = Vector2(0, 40)
+	_nest_button.visible = false
+	_nest_button.pressed.connect(func(): respawn_requested.emit(Nests.RESPAWN_ARG))
+	box.add_child(_nest_button)
 
 
 func _build_pause() -> void:
@@ -446,7 +474,7 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 		phase = "filhote"
 	elif g < 0.6:
 		phase = "jovem"
-	elif g < 1.0:
+	elif g < GameConfig.ADULT_GROWTH:
 		phase = "subadulto"
 	var rest := "  · descansando" if st[Net.ST_RESTING] > 0.5 else ""
 	if st.size() > Net.ST_GROWTH_BOOST and st[Net.ST_GROWTH_BOOST] > 0.0 and g < 1.0:
@@ -456,7 +484,12 @@ func set_stats(st: PackedFloat32Array, species_id: String) -> void:
 			Injuries.FRACTURE: st[Net.ST_FRACTURE], Injuries.DEEP: st[Net.ST_DEEP]})
 	_injury_label.visible = _injury_label.text != ""
 	var wt: float = st[Net.ST_WORLD_TIME]
-	_clock_label.text = "Tempo do mundo: %dh %02dmin" % [int(wt / 3600.0), int(fmod(wt, 3600.0) / 60.0)]
+	_clock_label.text = Climate.calendar_text(wt)
+
+
+## Tempo agora ("Chuva", "Limpo · seca"), do WeatherView.
+func set_weather(text: String) -> void:
+	_weather_label.text = "Tempo: " + text if text != "" else ""
 
 
 func set_roster(names: Array) -> void:
@@ -467,6 +500,24 @@ func set_roster(names: Array) -> void:
 ## Faro (tecla F): pronto ou quantos segundos faltam.
 func set_sniff_status(seconds_left: float) -> void:
 	_sniff_label.text = "Faro (F): pronto" if seconds_left <= 0.0 else "Faro (F): %d s" % ceili(seconds_left)
+
+
+## Reprodução: o ninho e a recarga da postura (Nests.status_text; "" esconde).
+func set_nest_status(text: String) -> void:
+	_nest_label.text = text
+	_nest_label.visible = text != ""
+
+
+## Pedido de parceiro de outro jogador ("" esconde).
+func set_mate_request(text: String) -> void:
+	_mate_label.text = text
+
+
+## Tela de morte: mostra "Nascer no ninho" quando o próprio ninho tem ovo pronto.
+func set_nest_ready(on: bool, species_id: String = "") -> void:
+	_nest_button.visible = on
+	if on and Species.is_valid(species_id):
+		_nest_button.text = "Nascer no ninho (%s filhote)" % Species.display_name(species_id)
 
 
 func set_prompt(text: String) -> void:
