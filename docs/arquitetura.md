@@ -22,9 +22,9 @@ Um único executável faz os dois papéis. `scripts/main.gd` decide:
 |---|---|---|
 | `scripts/data/` | Tabela de espécies e números de equilíbrio | nada |
 | `scripts/world/` | `Terrain`: altura, rio, arbustos, pontos de água | nada |
-| `scripts/sim/` | Lógica do mundo: `Dino`, `Metabolism`, `Injuries`, `Combat`, `Movement`, `BotBrain`, `WorldSim` | data, world |
+| `scripts/sim/` | Lógica do mundo: `Dino`, `Metabolism`, `Injuries`, `Combat`, `Movement`, `BotBrain`, `Climate`, `WorldSim` | data, world |
 | `scripts/net/` | `net.gd` (autoload `Net`, **todas** as RPCs) e `GameServer` | sim |
-| `scripts/client/` | `GameClient`, `DinoView`, `TerrainView` | sim (só leitura), net |
+| `scripts/client/` | `GameClient`, `DinoView`, `TerrainView`, `WeatherView`, `SkyView`, `ClimateMaterials` | sim (só leitura), net |
 | `scripts/ui/` | `Hud` (menu, barras, morte, pausa, chat) | data |
 | `tests/` | Testes de unidade (`test_*.gd`) e o cliente de teste de rede | tudo |
 | `tools/` | Scripts de teste, print e exportação | — |
@@ -49,9 +49,10 @@ headless e rápido (`tests/run_tests.gd`).
   roda todo passo, passo sim passo não (com o tempo somado) ou fica congelado, conforme o
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:
   pros outros bichos ele não existe.
-- `WorldSim.step`: faixas por distância → IA dos bots (só os que rodam neste passo) → separação dos corpos → metabolismo → comer/beber →
-  golpes pendentes → mortes → carcaças → arbustos → reposição de bots → diretor de população →
-  saída de quem estava em briga → pegadas do faro.
+- `WorldSim.step`: faixas por distância → clima nos bichos (`Climate.apply`) → IA dos bots (só os
+  que rodam neste passo) → separação dos corpos → metabolismo → comer/beber → golpes pendentes →
+  mortes → carcaças → arbustos → reposição de bots → diretor de população → raio
+  (`Climate.lightning`) → saída de quem estava em briga → pegadas do faro.
 - Ferimentos (`sim/injuries.gd`, valores em `config.gd`): cada golpe que acerta passa por
   `Injuries.from_hit`, que abre sangramento, fratura ou mordida funda em `dino.injuries`
   (tipo → segundos que faltam). Os tempos andam em `Metabolism.step` (só com o dino ativo, então
@@ -86,13 +87,13 @@ Servidor → cliente:
 
 | RPC | Conteúdo |
 |---|---|
-| `s_welcome(info)` | id da entidade, nome (como foi cadastrado), se a conta acabou de ser criada, espécie, semente e tamanho do mapa (`map_size`), se foi restaurado, modo dev |
+| `s_welcome(info)` | id da entidade, nome (como foi cadastrado), se a conta acabou de ser criada, espécie, semente e tamanho do mapa (`map_size`), tempo do mundo, trechos de tempo forçado pelo `/weather` (`weather_override`), se foi restaurado, modo dev |
 | `s_login_failed(motivo)` | versão diferente, nome em uso, servidor cheio |
 | `s_teleport(seq, pos, yaw)` | posição forçada (spawn, `/tp`). O cliente adota o `seq` novo e o servidor ignora posições antigas |
 | `s_snapshot(PackedFloat32Array)` | 8 floats por entidade: id, espécie, crescimento, x, y, z, yaw, flags (morto, correndo, descansando, comendo, jogador, mancando (vida baixa ou osso quebrado), nadando, andando) |
 | `s_self_stats(PackedFloat32Array)` | vida, vida máx., comida, água, fôlego, crescimento, vel. andar/correr (já com a fratura), interação, descansando, tempo do mundo, segundos de boost de crescimento, segundos que faltam de sangramento, fratura e mordida funda (`ST_BLEED`, `ST_FRACTURE`, `ST_DEEP`; 0 = não tem) |
 | `s_roster(dict)` | id → nome dos jogadores online |
-| `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte |
+| `s_event(tipo, a, b, valor, texto)` | golpe começou, golpe acertou (parte, dano), morte; raio (`Ev.LIGHTNING` = 10: `a` = bot atingido, texto "x;y;z"); `/weather` (`Ev.WEATHER` = 11: `a` = tempo ou -1, texto "de;até") |
 | `s_died(causa)`, `s_message(texto)` | morte do próprio jogador; mensagens/chat |
 | `s_password_changed(ok, texto)` | resposta da troca de senha (o cliente atualiza a senha lembrada) |
 | `s_redeem_result(ok, texto, perks)` | resposta do resgate, com o que a conta tem agora (`beta`, `species`) |
@@ -108,6 +109,44 @@ então com o mundo parado nada envelhece. Guarda no máximo `SCENT_MAX_PRINTS` (
 antes) e não vai pro save. `WorldSim.sniff(dino)` confere a recarga (por nome de jogador) e devolve
 as pegadas dos outros e as carcaças com carne no `smell_radius` da espécie. No cliente,
 `ScentView` desenha tudo numa MultiMesh só e apaga sozinho depois de `SNIFF_SHOW_S`.
+
+## Clima (`scripts/sim/climate.gd`)
+
+O clima é uma **função da semente do mapa e do tempo do mundo** (`world_time`). O servidor e cada
+cliente têm um `Climate` com a mesma semente e o mesmo terreno e chegam no mesmo resultado sem
+mensagem nova: o tempo do mundo já vai no `ST_WORLD_TIME` (10x por segundo) e a semente no
+`s_welcome`. Nada vai pro save (sai de novo do `world_time` salvo) e, como o tempo do mundo para
+sem ninguém online, o clima também para. Números em `config.gd`, seção "Clima".
+
+- Calendário: dia de `DAY_S` (claro + `NIGHT_S` de noite, `Climate.daylight` suave), ano com as
+  estações de `SEASON_HOURS` (começa na primavera). Funções estáticas, sem semente.
+- Tempo: blocos de `WEATHER_BLOCK_S`; o tempo de cada bloco sai de `Climate.hash01(semente, bloco)`
+  com os pesos da estação (`WEATHER_CHANCES`). Hash próprio em inteiros de 32 bits (igual em
+  qualquer PC, sem `rng`). Na seca os pesos de chuva viram zero.
+- Neve acumulada (0 a 1): somada trecho a trecho (blocos e `/weather`) desde um instante em que
+  com certeza é zero (o começo do último inverno, ou depois que ela derreteu). Cache por bloco:
+  um bloco novo custa ~0,3 ms (a cada 20 min de mundo); dentro do bloco, microssegundos.
+  `snow_cover(altura, neve)` diz quanto de neve tem no chão; a linha de neve desce com a neve.
+- Água: `Climate.is_drinkable(x, z, t)` (nível do rio, que baixa na seca, e gelo). O gelo é por
+  trecho do rio (a cada `BANK_STEP` m de z, pela altura das margens); os `RIVER_NEVER_FREEZE` mais
+  baixos nunca congelam. `nearest_open_water` pula gelo e acompanha o rio mais estreito.
+- Efeitos no `WorldSim`: `Climate.apply` (todo passo) põe `water_level` no mundo e, em cada bicho
+  ativo, `climate_hunger_mult` (lido em `Metabolism.hunger_per_second`) e `climate_sprint_mult`
+  (lido em `Movement.speeds`, então vale pros bots e chega no cliente pelo `ST_SPRINT`). O mundo
+  ainda usa o clima na rebrota (`regrow_mult`), na reposição (`effective_bot_target`,
+  `herbivore_share`), na caça dos bots (`hunt_hunger_start`) e no beber (`can_drink`,
+  `nearest_water_point`). `Movement.ground_y`/`is_swimming` recebem o nível do rio.
+- Raio: `Climate.lightning` sorteia por minuto de mundo (só em tempestade) e `Climate.strike` mata
+  um bot ativo; jogador é filtrado explicitamente (teste em `test_climate.gd`).
+- `/weather` (dev) é a única coisa que não sai da semente: os trechos forçados ficam em
+  `Climate.overrides` (só na memória do servidor) e vão pros clientes por `s_event` (`Ev.WEATHER`)
+  e no `s_welcome`; um novo corta o anterior, igual dos dois lados. `/time` só muda o
+  `world_time` (pra frente).
+- Cliente: `WeatherView` (filho do `GameClient`) tem o seu `Climate`, anda o relógio entre um
+  `ST_WORLD_TIME` e outro e desenha: `SkyView` (sol, lua, cor do céu, luz ambiente e neblina),
+  chuva e neve (`CPUParticles3D` numa caixa em volta da câmera), neve no chão e nos arbustos e
+  gelo no rio (`ClimateMaterials`: shaders simples pro renderizador Compatibilidade;
+  `TerrainView.set_climate`), o rio mais baixo na seca e o risco do raio.
 
 ## Hitbox
 
