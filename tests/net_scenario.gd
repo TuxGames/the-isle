@@ -24,6 +24,10 @@ extends Node
 ##   fareja      entra como gil (carnotaurus), vai pra perto do caminho do fred, anda um pouco,
 ##               fareja (F): recebe as pegadas do fred e não as próprias; farejar de novo logo
 ##               em seguida dá "em recarga".
+##   clima       entra como hana (carnotaurus), pula pro inverno (/time), força uma nevasca
+##               (/weather), vai pra um morro e confere que calcula aqui (Climate, com a semente e
+##               o tempo do mundo) a mesma estação, tempo e neve que o servidor (/clima), e que
+##               corre menos na neve (ST_SPRINT) sem andar mais devagar.
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -86,7 +90,7 @@ func _process(delta: float) -> void:
 
 
 func _on_connected() -> void:
-	var species := "carnotaurus" if role in ["alice", "fareja"] else "dryosaurus"
+	var species := "carnotaurus" if role in ["alice", "fareja", "clima"] else "dryosaurus"
 	var pname := "alice" if role == "alice" else ("carla" if role == "map_check" else "bob")
 	if role == "rastro":
 		pname = "fred"
@@ -98,6 +102,8 @@ func _on_connected() -> void:
 		pname = "Tux"
 	elif role == "resgata":
 		pname = "eva"
+	elif role == "clima":
+		pname = "hana"
 	var password := "chute-errado" if role == "intruso" else "senha-" + pname
 	if role == "dani_nova":
 		password = "nova-dani"
@@ -128,6 +134,8 @@ func _on_connected() -> void:
 			_rastro()
 		"fareja":
 			_fareja()
+		"clima":
+			_clima()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -503,4 +511,95 @@ func _fareja() -> void:
 		return _finish()
 	_check(not bool(answers[1][0]) and float(answers[1][2]) > GameConfig.SNIFF_COOLDOWN_S - 5.0,
 			"logo depois: em recarga (%.0f s)" % float(answers[1][2]))
+	_finish()
+
+
+## Clima (design, seção 11): o cliente calcula o mesmo clima que o servidor, só com a semente e o
+## tempo do mundo que já chegam pela rede; o /weather chega por s_event.
+func _clima() -> void:
+	var messages: Array = []
+	Net.message_received.connect(func(text): messages.append(text))
+	if not await _wait_for(func(): return not welcome.is_empty() and stats.size() > 0 and my_seq > 0, 10.0):
+		_fail("não entrou")
+		return _finish()
+	var ter := Terrain.get_shared(int(welcome["seed"]), float(welcome["map_size"]))
+	var local := Climate.new(int(welcome["seed"]), ter)
+	var forced = welcome.get("weather_override", [])
+	local.set_overrides(forced if forced is Array else [])
+	var walk0: float = stats[Net.ST_WALK]
+	var sprint0: float = stats[Net.ST_SPRINT]
+	var t0: float = stats[Net.ST_WORLD_TIME]
+	_check(Climate.season_at(t0) != Climate.Season.WINTER, "começa fora do inverno (%s)" % Climate.calendar_text(t0))
+
+	# O servidor pula pro inverno; o cliente vê pelo ST_WORLD_TIME e calcula a estação sozinho.
+	_dev("/time inverno")
+	var winter := Climate.next_season_start(t0, Climate.Season.WINTER)
+	if not await _wait_for(func(): return stats[Net.ST_WORLD_TIME] >= winter - 1.0, 5.0):
+		_fail("o tempo do mundo não pulou pro inverno")
+		return _finish()
+	_check(Climate.season_at(stats[Net.ST_WORLD_TIME]) == Climate.Season.WINTER,
+			"o cliente calcula inverno (%s)" % Climate.calendar_text(stats[Net.ST_WORLD_TIME]))
+
+	# Nevasca forçada: chega por s_event e o cliente soma na conta dele.
+	events.clear()
+	_dev("/weather nevasca 60")
+	if not await _wait_for(func(): return events.any(func(e): return e[0] == WorldSim.Ev.WEATHER), 5.0):
+		_fail("o /weather não chegou no cliente")
+		return _finish()
+	var ev: Array = events.filter(func(e): return e[0] == WorldSim.Ev.WEATHER)[0]
+	var span := String(ev[4]).split(";")
+	local.set_override(int(ev[1]), float(span[0]), float(span[1]))
+	var t1: float = stats[Net.ST_WORLD_TIME]
+	# 10 min de nevasca: a neve ainda está acumulando (a conta tem que bater no meio do caminho).
+	_dev("/time +10m")
+	if not await _wait_for(func(): return stats[Net.ST_WORLD_TIME] >= t1 + 590.0, 5.0):
+		_fail("o /time +10m não chegou")
+		return _finish()
+
+	# Vai pra um morro (onde já está branco).
+	var hill := Vector3(-1, -1, -1)
+	var x := my_pos.x - 300.0
+	while x < my_pos.x + 300.0 and hill.x < 0.0:
+		var z := my_pos.z - 300.0
+		while z < my_pos.z + 300.0:
+			var h := ter.height_at(x, z)
+			if x > ter.play_min + 40.0 and x < ter.play_max - 40.0 and z > ter.play_min + 40.0 \
+					and z < ter.play_max - 40.0 and h > 16.0 and h < 30.0 and ter.slope_at(x, z) < 0.35:
+				hill = Vector3(x, h, z)
+				break
+			z += 8.0
+		x += 8.0
+	if hill.x < 0.0 or not await _teleport(int(hill.x), int(hill.z)):
+		_fail("não achou ou não chegou num morro (%s)" % hill)
+		return _finish()
+	await _wait(0.6)
+
+	# O servidor conta o que ele calculou; o cliente tem que chegar no mesmo.
+	messages.clear()
+	_dev("/clima")
+	if not await _wait_for(func(): return messages.any(func(m): return String(m).contains("[t=")), 5.0):
+		_fail("sem resposta do /clima")
+		return _finish()
+	var line: String = messages.filter(func(m): return String(m).contains("[t="))[0]
+	var server := {}
+	for part in line.substr(line.find("[t=") + 1).trim_suffix("]").split(" "):
+		var kv := part.split("=")
+		if kv.size() == 2:
+			server[kv[0]] = float(kv[1])
+	var ts: float = server.get("t", -1.0)
+	_check(int(server.get("estacao", -1)) == Climate.season_at(ts) and Climate.season_at(ts) == Climate.Season.WINTER,
+			"mesma estação que o servidor (inverno)")
+	_check(int(server.get("tempo", -1)) == local.weather_at(ts) and local.weather_at(ts) == Climate.Weather.BLIZZARD,
+			"mesmo tempo que o servidor (nevasca)")
+	_check(absf(float(server.get("neve", -1.0)) - local.snow_amount(ts)) < 0.0005,
+			"mesma neve acumulada (servidor %.4f, cliente %.4f)" % [float(server.get("neve", -1.0)), local.snow_amount(ts)])
+	_check(absf(float(server.get("agua", -9.0)) - local.water_level(ts)) < 0.0005, "mesmo nível do rio")
+	_check(local.snow_amount(ts) > 0.5 and local.snow_amount(ts) < 0.95, "a neve ainda está acumulando (%.3f)" % local.snow_amount(ts))
+
+	# Na neve corre menos (servidor manda ST_SPRINT) e anda igual.
+	var cover := Climate.snow_cover(ter.height_at(my_pos.x, my_pos.z), local.snow_amount(stats[Net.ST_WORLD_TIME]))
+	var want := Climate.sprint_mult(cover)
+	_check(absf(stats[Net.ST_SPRINT] / sprint0 - want) < 0.01,
+			"corre a %.0f%% na neve (%.2f → %.2f m/s)" % [want * 100.0, sprint0, stats[Net.ST_SPRINT]])
+	_check(absf(stats[Net.ST_WALK] - walk0) < 0.01, "anda igual (%.2f m/s)" % stats[Net.ST_WALK])
 	_finish()
