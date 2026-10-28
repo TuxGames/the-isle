@@ -53,6 +53,9 @@ func start(args: Dictionary) -> Error:
 	else:
 		if mismatch != "":
 			_set_aside_save(mismatch)
+			# Mapa novo, mesmos dinos: os jogadores não podem perder o que já cresceram.
+			var carried := sim.adopt_players(saved)
+			_log("os dinos dos jogadores vieram junto pro mapa novo: %d" % carried)
 		sim.populate()
 		_log("mundo novo criado: semente=%d mapa=%d m bots=%d" % [seed_value, sim.terrain.size, sim.bot_count()])
 
@@ -124,10 +127,17 @@ func _on_peer_disconnected(id: int) -> void:
 	var info: Dictionary = peers[id]
 	peers.erase(id)
 	var dino_id: int = info["dino_id"]
+	var now_gone := true
 	if dino_id > 0:
-		sim.logout_player(dino_id)
-	_log("[login] %s saiu (world_time=%.3f)" % [info["name"], sim.world_time])
-	_broadcast_message("%s saiu do servidor" % info["name"])
+		now_gone = sim.request_logout(dino_id)
+	if now_gone:
+		_log("[login] %s saiu (world_time=%.3f)" % [info["name"], sim.world_time])
+		_broadcast_message("%s saiu do servidor" % info["name"])
+	else:
+		_log("[login] %s saiu no meio de uma briga: o dino fica %d s no mundo (world_time=%.3f)" % [
+			info["name"], int(GameConfig.COMBAT_LOGOUT_S), sim.world_time])
+		_broadcast_message("%s saiu no meio de uma briga: o dino fica mais %d segundos no mundo" % [
+			info["name"], int(GameConfig.COMBAT_LOGOUT_S)])
 	save()
 	_roster_dirty = true
 	if peers.is_empty():

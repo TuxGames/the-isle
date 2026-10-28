@@ -55,6 +55,11 @@ Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux --password=te
 
 - Sem ninguém online o **mundo inteiro para** (nada envelhece, cura, passa fome, muda de estação).
 - Quem sai **some do mundo e fica congelado**: não pode ser atacado, não cura, não passa fome.
+  Única exceção: saiu até 10 s depois de levar um golpe → o dino fica mais 10 s no mundo
+  (`COMBAT_LOGOUT_S`).
+- Trocar o tamanho/semente do mapa **não pode apagar o dino de ninguém** (`WorldSim.adopt_players`).
+- Decisões marcadas com **(R)** no design.md foram recomendações aprovadas pelo Marcelo: os números
+  ficam em `config.gd`/`species.gd` pra mudar fácil.
 - Morreu → **recomeça jovem**, sempre.
 - Raio só mata **bot**, nunca jogador (quando o clima existir).
 - Máximo de **5 jogadores**; população de bots ~70 (máx. 100).

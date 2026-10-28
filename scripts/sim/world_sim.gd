@@ -36,6 +36,8 @@ var bush_food := PackedFloat32Array()
 var player_records := {}
 ## Momentos (world_time) em que um bot novo deve entrar.
 var respawn_queue: Array = []
+## Jogadores que saíram no meio de uma briga: id do dino -> world_time em que ele sai do mundo.
+var lingering := {}
 ## Onde e qual bot entra, e quais congelados mudam de lugar (design, seção 3).
 var director := PopulationDirector.new()
 ## Golpes em andamento: [{"id": atacante, "t": segundos até acertar}]
@@ -254,6 +256,7 @@ func step(dt: float) -> void:
 	_regrow_bushes(dt)
 	_process_respawns()
 	director.update(self, dt)
+	_finish_lingering()
 
 
 ## Simulação por distância (design, seção 5), contando o jogador mais próximo de cada bot:
@@ -538,6 +541,13 @@ func _player_spawn_point() -> Vector3:
 ## Coloca o jogador no mundo. Se ele tem um dino vivo salvo, volta exatamente igual.
 ## Devolve {"dino": Dino, "restored": bool}.
 func login_player(player_name: String, species_choice: String) -> Dictionary:
+	# Voltou antes do dino sair do mundo (saiu no meio de uma briga): assume o mesmo dino.
+	for id in lingering:
+		var ld: Dino = dinos.get(id)
+		if ld != null and ld.player_name == player_name:
+			lingering.erase(id)
+			ld.client_seq += 1
+			return {"dino": ld, "restored": true}
 	var rec: Dictionary = player_records.get(player_name, {})
 	if not rec.is_empty() and bool(rec.get("alive", false)):
 		var d := Dino.from_dict(rec["dino"])
@@ -546,6 +556,11 @@ func login_player(player_name: String, species_choice: String) -> Dictionary:
 		d.player_name = player_name
 		d.alive = true
 		d.client_seq = 1
+		if bool(rec.get("relocate", false)):
+			# Veio de outro mapa: mesmo dino, lugar novo.
+			var p := _player_spawn_point()
+			d.pos = Vector3(p.x, Movement.ground_y(terrain, p.x, p.z, d.body_height()), p.z)
+			rec.erase("relocate")
 		dinos[d.id] = d
 		return {"dino": d, "restored": true}
 	return {"dino": respawn_player(player_name, species_choice), "restored": false}
@@ -565,6 +580,48 @@ func respawn_player(player_name: String, species_choice: String) -> Dino:
 	dinos[d.id] = d
 	player_records[player_name] = {"alive": true, "dino": d.to_dict()}
 	return d
+
+
+## O jogador saiu. Se levou um golpe há menos de COMBAT_LOGOUT_S, o dino fica esse tempo no
+## mundo, parado e vulnerável, e só depois sai (decisão de 28/10: não dá pra fugir de uma briga
+## fechando o jogo). Devolve true se saiu na hora.
+func request_logout(id: int) -> bool:
+	var d: Dino = dinos.get(id)
+	if d == null or d.is_bot:
+		return true
+	if GameConfig.COMBAT_LOGOUT_S <= 0.0 or world_time - d.last_attacked_time >= GameConfig.COMBAT_LOGOUT_S:
+		logout_player(id)
+		return true
+	d.interacting = false
+	d.sprinting = false
+	d.resting = false
+	d.moving_speed = 0.0
+	lingering[id] = world_time + GameConfig.COMBAT_LOGOUT_S
+	return false
+
+
+func _finish_lingering() -> void:
+	for id in lingering.keys():
+		if not dinos.has(id):
+			lingering.erase(id)  # morreu enquanto esperava
+		elif world_time >= float(lingering[id]):
+			lingering.erase(id)
+			logout_player(id)
+
+
+## Leva os jogadores de um save de outro mapa (semente ou tamanho) pra este mundo novo: mesmo
+## dino (espécie, crescimento, vida, fome, sede), num lugar novo quando entrar. Os bots não vêm.
+## Devolve quantos dinos vivos vieram.
+func adopt_players(old_save: Dictionary) -> int:
+	var count := 0
+	var old: Dictionary = old_save.get("players", {})
+	for player_name in old:
+		var rec: Dictionary = Dictionary(old[player_name]).duplicate(true)
+		if bool(rec.get("alive", false)) and rec.has("dino"):
+			rec["relocate"] = true
+			count += 1
+		player_records[player_name] = rec
+	return count
 
 
 ## Tira o jogador do mundo e congela o estado dele (não cura, não passa fome, não cresce).

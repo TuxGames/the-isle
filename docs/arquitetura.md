@@ -39,6 +39,12 @@ headless e rápido (`tests/run_tests.gd`).
   - snapshot de todas as entidades pra cada jogador (15 Hz)
   - status do próprio dino pra cada jogador (10 Hz)
   - save em disco a cada 30 s (e em toda saída/morte)
+- Saída do jogador: `WorldSim.request_logout`. Se ele levou golpe nos últimos
+  `COMBAT_LOGOUT_S`, o dino fica em `WorldSim.lingering` (parado, vulnerável) e sai sozinho
+  depois; se o jogador voltar antes, `login_player` devolve o mesmo dino.
+- Save de outro mapa (semente ou tamanho): o servidor guarda o antigo à parte, cria o mundo
+  novo e chama `WorldSim.adopt_players`, que traz os registros dos jogadores marcados com
+  `relocate` (no login o dino ganha um lugar novo no mapa).
 - Simulação por distância (`WorldSim._update_sim_tiers`, valores em `config.gd`): cada bot
   roda todo passo, passo sim passo não (com o tempo somado) ou fica congelado, conforme o
   jogador mais próximo. Congelado fica fora do `_grid` e o `get_dino` devolve null pra ele:

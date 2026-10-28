@@ -238,7 +238,7 @@ func _alice() -> void:
 		_check(e[2] == bob_id and e[3] > 0.0, "dano registrado no bob (%.1f, parte: %s)" % [e[3], e[4]])
 
 	# Bob sai depois de ser mordido: o dino dele tem que sumir do mundo.
-	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0)
+	var gone := await _wait_for(func(): return not entities.has(bob_id), 15.0 + GameConfig.COMBAT_LOGOUT_S)
 	_check(gone, "dino do bob some quando ele sai")
 
 	# Alice continua jogando sozinha: o mundo segue andando.
@@ -261,6 +261,9 @@ func _bob() -> void:
 	var hp0: float = stats[Net.ST_HEALTH]
 	var bitten := await _wait_for(func(): return stats[Net.ST_HEALTH] < hp0 - 0.01, 40.0)
 	_check(bitten, "levou a mordida (vida %.1f → %.1f)" % [hp0, stats[Net.ST_HEALTH]])
+	# Espera passar o tempo de briga: quem sai logo depois de apanhar deixa o dino mais um pouco
+	# no mundo (test_world cobre isso). Aqui o bob tem que voltar exatamente igual.
+	await _wait(GameConfig.COMBAT_LOGOUT_S + 0.5)
 	# Fome e sede em 20%: não cura nem passa fome rápido, então a vida fica parada
 	# e dá pra comparar com precisão quando ele voltar.
 	_dev("/food 20 20")

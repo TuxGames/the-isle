@@ -13,8 +13,10 @@ const MAX_PLAYERS := 5
 const WORLD_SEED := 20261014
 
 ## Lado do mapa em metros quando o servidor não escolhe outro (--map-size=N, de 256 a 8192).
-## O tamanho final ainda é decisão do Marcelo (1, 2 ou 4 km); até lá fica o mapa da v0.1.
-const DEFAULT_MAP_SIZE := 512.0
+## 2 km (uns 7 min andando de um lado ao outro): recomendação aprovada pelo Marcelo (28/10).
+## Pra mudar: troque aqui e o --map-size do iniciar_servidor.bat. Os dinos dos jogadores vão
+## junto pro mapa novo (WorldSim.adopt_players); só os bots recomeçam.
+const DEFAULT_MAP_SIZE := 2048.0
 
 ## Frequências (por segundo).
 const SIM_HZ := 20.0
@@ -24,9 +26,8 @@ const CLIENT_SEND_HZ := 20.0
 
 const SAVE_INTERVAL_S := 30.0
 
-## População de bots. Design: média ~70, máximo 100. O mapa da v0.1 é pequeno
-## (512 m), então o padrão é menor; ajuste com --bots=N no servidor.
-const DEFAULT_BOT_TARGET := 20
+## População de bots. Design: média ~70, máximo 100. Ajuste com --bots=N no servidor.
+const DEFAULT_BOT_TARGET := 70
 const BOT_MAX := 100
 const HERBIVORE_SHARE := 0.65
 
@@ -68,6 +69,11 @@ const DIRECTOR_RELOCATE_COOLDOWN_S := 300.0
 const DIRECTOR_SOURCE_MIN_DIST := 480.0
 ## O bot reaparece a pelo menos isso de todos os jogadores (mais longe que a simulação completa).
 const DIRECTOR_RELOCATE_MIN_DIST := 180.0
+
+## Quem sai do jogo até esse tempo depois de levar um golpe deixa o dino mais esse tempo no
+## mundo, parado e vulnerável (não dá pra fugir de uma briga fechando o jogo). Recomendação
+## aprovada pelo Marcelo (28/10). 0 desliga.
+const COMBAT_LOGOUT_S := 10.0
 
 ## Crescimento (0 = filhote, 1 = adulto) com que o jogador começa / recomeça.
 const PLAYER_START_GROWTH := 0.1
