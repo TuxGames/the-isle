@@ -200,7 +200,7 @@ func _controls_tab() -> Control:
 	_sens_value.text = _sens_text(settings.mouse_sens)
 	b.add_child(_check("Inverter o mouse na vertical", settings.invert_y, func(on): settings.invert_y = on))
 	var keys := _label("WASD andar · Shift correr · Clique morder · E (segurar) comer/beber\n"
-			+ "C descansar · Enter chat/comandos · F1 ajuda · Esc menu", 13, Color(0.8, 0.8, 0.75))
+			+ "C descansar · F faro · Enter chat/comandos · F1 ajuda · Esc menu", 13, Color(0.8, 0.8, 0.75))
 	b.add_child(keys)
 	return b
 
