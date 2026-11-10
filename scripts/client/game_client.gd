@@ -379,8 +379,10 @@ func _on_snapshot(data: PackedFloat32Array) -> void:
 	while i + Net.SNAP_STRIDE <= data.size():
 		var id := int(data[i])
 		var flags := int(data[i + 7])
+		var finite := snapshot_entry_is_finite(data, i)
 		i += Net.SNAP_STRIDE
-		if id == my_id:
+		# Entidade com NaN ou infinito é como se não tivesse vindo (se já tinha DinoView, some).
+		if id == my_id or not finite:
 			continue
 		seen[id] = true
 		var dead := (flags & Net.SF_DEAD) != 0
@@ -403,6 +405,16 @@ func _on_snapshot(data: PackedFloat32Array) -> void:
 		if not seen.has(id):
 			views[id].queue_free()
 			views.erase(id)
+
+
+## Os floats da entidade que começa em `i` no snapshot são todos finitos? O servidor não manda
+## NaN nem infinito, mas um só que chegasse aqui passava pro meu dino em _push_out_of_others e
+## dali, pelo c_state, pro servidor e pra todo mundo.
+static func snapshot_entry_is_finite(data: PackedFloat32Array, i: int) -> bool:
+	for k in Net.SNAP_STRIDE:
+		if not is_finite(data[i + k]):
+			return false
+	return true
 
 
 func _on_self_stats(st: PackedFloat32Array) -> void:
@@ -713,11 +725,15 @@ func _push_out_of_others() -> void:
 		var r: float = Species.footprint_radius(v.species, v.growth) + my_r
 		var d := Vector2(my_pos.x - v.position.x, my_pos.z - v.position.z)
 		var dist := d.length()
-		if dist >= r or dist < 0.001:
+		# Toda comparação com NaN dá falso: sem conferir, um bicho com a posição estragada
+		# passava pelos dois testes de distância e o NaN ia pra minha posição.
+		if not is_finite(dist) or dist >= r or dist < 0.001:
 			continue
 		var m: float = Species.mass_for(v.species, v.growth)
 		var share := m / (m + my_m)
 		var push := d / dist * (r - dist) * share
+		if not push.is_finite():
+			continue
 		my_pos.x += push.x
 		my_pos.z += push.y
 

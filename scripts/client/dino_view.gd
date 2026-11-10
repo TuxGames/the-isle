@@ -223,6 +223,9 @@ func set_growth(g: float) -> void:
 
 
 func set_target(pos: Vector3, yaw: float, p_flags: int) -> void:
+	# Posição ou yaw que não forem finitos (NaN, infinito) não entram: o bicho fica onde estava.
+	if not pos.is_finite() or not is_finite(yaw):
+		return
 	flags = p_flags
 	if not _has_target or position.distance_to(pos) > 25.0:
 		position = pos
