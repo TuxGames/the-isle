@@ -598,10 +598,11 @@ func login_player(player_name: String, species_choice: String) -> Dictionary:
 		d.player_name = player_name
 		d.alive = true
 		d.client_seq = 1
-		if bool(rec.get("relocate", false)):
-			# Veio de outro mapa: mesmo dino, lugar novo.
+		if bool(rec.get("relocate", false)) or d.needs_relocate:
+			# Veio de outro mapa, ou o lugar salvo não prestava (Dino.from_dict): mesmo dino, lugar novo.
 			var p := _player_spawn_point()
 			d.pos = Vector3(p.x, Movement.ground_y(terrain, p.x, p.z, d.body_height()), p.z)
+			d.needs_relocate = false
 			rec.erase("relocate")
 		dinos[d.id] = d
 		return {"dino": d, "restored": true}
@@ -782,22 +783,29 @@ func save_mismatch(data: Dictionary) -> String:
 ## Formato 3 lê igual: os dinos só não tinham "injuries" (Dino.from_dict deixa sem ferimentos).
 ## Formato 4 lê igual: só não tinha "nests" (Nests.load_save deixa o mundo sem ninhos).
 func load_save(data: Dictionary) -> void:
+	# Os jogadores primeiro: se algum trecho mais abaixo estiver estragado e abortar a leitura, os
+	# dinos dos amigos já carregaram (o save seguinte sobrescreve o arquivo com o que estiver aqui).
+	player_records = data.get("players", {}).duplicate(true)
 	world_time = float(data.get("world_time", 0.0))
 	next_id = int(data.get("next_id", 1))
 	dinos.clear()
 	for bd in data.get("bots", []):
 		var d := Dino.from_dict(bd)
 		d.is_bot = true
+		if d.needs_relocate:
+			# O lugar salvo não prestava (Dino.from_dict): o bot continua no mundo, em outro lugar.
+			var bp := terrain.random_land_point(rng)
+			d.pos = Vector3(bp.x, Movement.ground_y(terrain, bp.x, bp.z, d.body_height()), bp.z)
+			d.needs_relocate = false
 		if d.id <= 0 or dinos.has(d.id):
 			d.id = new_id()
 		next_id = maxi(next_id, d.id + 1)
 		dinos[d.id] = d
 	carcasses.clear()
 	for c in data.get("carcasses", []):
-		var cc: Dictionary = c.duplicate()
-		var p: Array = cc["pos"]
-		cc["pos"] = Vector3(float(p[0]), float(p[1]), float(p[2]))
-		cc["id"] = int(cc["id"])
+		var cc := _carcass_from_save(c)
+		if cc.is_empty():
+			continue
 		carcasses[cc["id"]] = cc
 		next_id = maxi(next_id, cc["id"] + 1)
 	# Formato 4 e antes não tinham ninhos: o mundo carrega sem nenhum (os dinos vêm iguais).
@@ -806,10 +814,30 @@ func load_save(data: Dictionary) -> void:
 	if bf.size() == bush_food.size():
 		for i in bf.size():
 			bush_food[i] = float(bf[i])
-	player_records = data.get("players", {}).duplicate(true)
 	respawn_queue = []
 	for t in data.get("respawn_queue", []):
 		respawn_queue.append(float(t))
+
+
+## Carcaça lida do save, ou {} se algum número dela não prestar (faltando, null ou não finito: é o
+## que sobra de um dino que morreu com a posição estragada). Sem isso o float(null) abortava o
+## load_save no meio e o que vinha depois (ninhos, arbustos, fila de reposição) nem carregava.
+static func _carcass_from_save(raw) -> Dictionary:
+	if not (raw is Dictionary):
+		return {}
+	var cc: Dictionary = raw.duplicate()
+	var p = Dino.pos_from(cc.get("pos"))
+	if p == null:
+		return {}
+	for key in ["id", "growth", "yaw", "meat", "meat_max", "t"]:
+		var v := Dino.finite_or(cc.get(key), NAN)
+		if is_nan(v):
+			return {}
+		cc[key] = v
+	cc["pos"] = p
+	cc["id"] = int(cc["id"])
+	cc["yaw"] = wrapf(cc["yaw"], -PI, PI)
+	return cc
 
 
 # ---------------------------------------------------------------- clima (sim/climate.gd)

@@ -94,7 +94,8 @@ static func sanitize(raw) -> Dictionary:
 	if not (raw is Dictionary):
 		return out
 	for type in TYPES:
-		var left := float(raw.get(type, 0.0))
+		# Tempo que não for um número finito (null, infinito) some: senão o ferimento nunca sarava.
+		var left := Dino.finite_or(raw.get(type), 0.0)
 		if left > 0.0:
 			out[type] = left
 	return out

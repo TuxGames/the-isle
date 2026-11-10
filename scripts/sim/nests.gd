@@ -723,11 +723,15 @@ func load_save(w: WorldSim, data: Dictionary) -> void:
 	for raw in data.get("list", []):
 		if not (raw is Dictionary) or not Species.is_valid(String(raw.get("species", ""))):
 			continue
-		var id := int(raw.get("id", 0))
+		# Ninho sem lugar (posição faltando, null ou não finita: feito por um dino com a posição
+		# estragada) não tem como existir no mapa: fica de fora em vez de abortar o load.
+		var p = Dino.pos_from(raw.get("pos"))
+		if p == null:
+			continue
+		var id := int(Dino.finite_or(raw.get("id"), 0.0))
 		if id <= 0 or nests.has(id):
 			id = w.new_id()
 		w.next_id = maxi(w.next_id, id + 1)
-		var p: Array = raw.get("pos", [0.0, 0.0, 0.0])
 		var eggs := []
 		var used := {}
 		for e in raw.get("eggs", []):
@@ -739,8 +743,8 @@ func load_save(w: WorldSim, data: Dictionary) -> void:
 				eggs.append({"slot": slot, "ready": bool(e.get("ready", false))})
 		nests[id] = {
 			"id": id, "owner": String(raw.get("owner", "")), "species": String(raw["species"]),
-			"pos": Vector3(float(p[0]), float(p[1]), float(p[2])), "eggs": eggs,
-			"hatch_at": float(raw.get("hatch_at", 0.0)), "laid": bool(raw.get("laid", not eggs.is_empty())),
+			"pos": p, "eggs": eggs,
+			"hatch_at": Dino.finite_or(raw.get("hatch_at"), 0.0), "laid": bool(raw.get("laid", not eggs.is_empty())),
 			"bot_slot": bool(raw.get("bot_slot", false)),
 		}
 	var lr: Dictionary = data.get("lay_ready", {})
