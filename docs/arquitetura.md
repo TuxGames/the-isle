@@ -32,6 +32,13 @@ Um único executável faz os dois papéis. `scripts/main.gd` decide:
 **Regra:** `scripts/sim/` não conhece rede nem tela. Por isso dá pra testar o jogo todo
 headless e rápido (`tests/run_tests.gd`).
 
+O executor (`tests/run_tests.gd`) só dá "ok" pra um teste que não falhou em nenhum `t.check`,
+fez pelo menos uma verificação e não teve erro de script enquanto rodava. O GDScript não tem
+exceção: num erro de script ele abandona a função no meio e segue, então o executor escuta os
+erros do motor (um `Logger`) pra saber que o teste não chegou ao fim. Arquivo de teste que não
+compila vira uma falha com o nome do arquivo. `tools/runner_test.sh` testa o próprio executor
+com testes de mentira criados numa pasta temporária (`--dir=`).
+
 ## Laço do servidor
 
 - `GameServer._process`: se **ninguém** está logado, não faz nada (o mundo para).

@@ -17,6 +17,7 @@ Jogo de sobrevivência com dinossauros pra até 5 amigos, inspirado em The Isle.
 tools/check.sh        # todos os scripts compilam?
 tools/test.sh         # compilação + testes de unidade + teste de rede (rode antes de todo commit)
 tools/net_test.sh     # só o teste de rede (servidor + clientes reais headless)
+tools/runner_test.sh  # só o teste do executor (tests/run_tests.gd acusa teste abortado/vazio/quebrado?)
 godot --headless --path . -s tests/run_tests.gd -- --only=nome   # filtra testes
 tools/screenshot.sh /tmp/a.png carnotaurus "/grow 1;/spawn triceratops 1" 1.9 -0.2   # print do jogo
 tools/export.sh       # gera build/DinoSurvival.exe (precisa dos export templates)
@@ -45,7 +46,8 @@ Rodar o cliente: `godot --path . -- --connect=127.0.0.1 --name=Tux --password=te
 - Mudou o protocolo de rede ou o formato do save? Suba `GameConfig.VERSION`. Se o save mudar,
   suba `WorldSim.SAVE_FORMAT` e escreva a migração em `load_save` (os amigos não podem perder o dino).
 - Feature nova = teste novo em `tests/test_*.gd` (unidade) e, se for de rede, uma etapa em
-  `tests/net_scenario.gd` + `tools/net_test.sh`.
+  `tests/net_scenario.gd` + `tools/net_test.sh`. Teste de unidade só sai "ok" se fizer pelo
+  menos um `t.check`/`t.near` e não der nenhum erro de script no caminho.
 - Texto que o jogador vê: **português do Brasil**. Comentários: português. Identificadores: inglês.
 - Mexeu no visual? Tire um print com `tools/screenshot.sh` e olhe antes de dar por pronto.
 - Ao terminar uma feature, atualize o status em `docs/design.md` (✅ / 🟡 / ⬜) e o `docs/roadmap.md`.
