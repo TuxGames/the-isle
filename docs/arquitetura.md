@@ -82,7 +82,7 @@ Cliente → servidor:
 RPC nova sempre com nome que vem **depois** de `c_login` (e `s_login_failed`) em ordem alfabética,
 declarada no fim da seção: assim o `c_login` não muda de posição e um jogo de outra versão ainda
 recebe "versão diferente".
-| `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando |
+| `c_state(seq, pos, yaw, flags)` | não confiável, 20 Hz | flags: correndo, andando. Pacote com posição ou yaw não finitos (NaN, infinito) é ignorado inteiro: o dino fica onde estava |
 | `c_action(ação, texto)` | confiável | atacar, começar/parar de comer, descansar, renascer (texto = espécie, ou `"nest"` pra nascer no próprio ninho), comando dev, chat |
 
 Servidor → cliente:
@@ -102,6 +102,21 @@ Servidor → cliente:
 | `s_staff_codes(lista, criado, texto)` | resposta das ações de admin: lista de códigos, o código recém-criado e uma mensagem |
 | `s_scent(ok, PackedFloat32Array, recarga)` | resposta do faro: `ok` false = ainda em recarga; 5 floats por item (x, z, idade, espécie, tipo: pegada ou carcaça); segundos até poder de novo |
 | `s_nests(lista, meu)` | ninhos, mandado no login e quando algo muda: lista de `{id, pos, sp (índice da espécie), owner, eggs (vagas com ovo), ready (vagas com o ovo pronto pro dono)}` e o ninho de quem recebe (`has_nest`, `eggs`, `ready`, `species`: o botão "Nascer no ninho") |
+
+### Números não finitos (NaN, infinito)
+
+Nenhum pode entrar no mundo: o `clampf` devolve NaN quando recebe NaN e o `wrapf` de infinito dá
+NaN, então um só passaria pelo `clamp_to_play_area`, iria no snapshot pra todos os clientes, de lá
+pros outros jogadores e pros bots em volta, e acabaria no save. Quem segura:
+
+- `GameServer.on_state` confere `pos.is_finite()` e `is_finite(yaw)` antes de qualquer conta.
+- Comandos de dev: `float("1e999")` é infinito. `/tp` ignora yaw não finito e traz o resto pra
+  faixa de -PI a PI; `/hurt` tem teto (`DEV_HURT_MAX_S`); o `+N` do `/time` tem teto
+  (`Climate.SPAN_MAX_YEARS`). Os outros já passavam por `clampf`, que segura infinito.
+- Cliente: `GameClient._on_snapshot` ignora a entidade que vier com algum número não finito,
+  `DinoView.set_target` não aceita alvo não finito e `_push_out_of_others` não deixa a posição de
+  outro bicho estragar a do próprio dino (que é a que vai pro servidor).
+- Save: ver "Save", abaixo.
 
 ## Reprodução (`scripts/sim/nests.gd`)
 
@@ -230,6 +245,13 @@ como estão naquele instante; quem está offline fica congelado no registro.
   laid, bot_slot}], lay_ready: {nome: world_time}}` (`Nests.to_save`). Save do formato 4 carrega
   sem ninhos e sem recarga; os dinos vêm iguais. Trocar de mapa (`adopt_players`) não leva os
   ninhos (eles são do lugar), só os dinos.
+- Número que não presta (o JSON grava NaN como `null` e infinito como `1e99999`, e `float(null)`
+  aborta a função que estava lendo): `Dino.finite_or` e `Dino.pos_from` leem com cuidado. Em
+  `Dino.from_dict` cada número cai no valor de quando o campo falta, e o dino sem posição fica com
+  `needs_relocate`: o jogador ganha um ponto de nascimento novo em `WorldSim.login_player` (como no
+  `relocate` da troca de mapa) e o bot um lugar novo em `load_save`. Carcaça e ninho sem posição
+  ficam de fora. O `load_save` lê os jogadores antes de tudo: se outro trecho abortar a leitura, os
+  dinos deles já carregaram. Nada disso muda o formato: um save bom carrega igual.
 - Tamanho do mapa ao subir o servidor: o de `--map-size`; senão o do save; senão 512 m.
 - Save de outro mapa (semente ou tamanho diferente) não é sobrescrito: o servidor guarda ele
   como `world.outro-mapa-<hora>.json` e começa um mundo novo (`WorldSim.save_mismatch`).
