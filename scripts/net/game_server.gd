@@ -25,6 +25,9 @@ var codes_path := ""
 ## Quem pode criar e revogar códigos (nomes de conta em minúsculas). --admins=Nome1,Nome2.
 var admins: Array = []
 
+## Teto do /hurt (comando de dev), em segundos.
+const DEV_HURT_MAX_S := 86400.0
+
 var _sim_accum := 0.0
 var _snap_accum := 0.0
 var _stats_accum := 0.0
@@ -404,6 +407,11 @@ func on_state(peer_id: int, seq: int, pos: Vector3, yaw: float, flags: int) -> v
 	var d := _dino_for_peer(peer_id)
 	if d == null or seq != d.client_seq:
 		return
+	# NaN e infinito não entram: o clampf devolve NaN quando recebe NaN e o wrapf de infinito dá
+	# NaN. Um só guardado aqui ia no snapshot pra todo mundo, passava pros outros jogadores e pros
+	# bots em volta e acabava no save. O pacote inteiro é ignorado e o dino fica onde estava.
+	if not pos.is_finite() or not is_finite(yaw):
+		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var elapsed := clampf(now - d.last_client_time, 0.01, 1.0)
 	d.last_client_time = now
@@ -501,8 +509,11 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				if parts.size() >= 3:
 					var p := sim.terrain.clamp_to_play_area(Vector3(float(parts[1]), 0.0, float(parts[2])))
 					p.y = Movement.ground_y(sim.terrain, p.x, p.z, d.body_height())
-					if parts.size() >= 4:
-						d.yaw = float(parts[3])
+					# float("1e999") dá infinito (x e z o clampf segura na borda; o yaw não tem
+					# clampf): yaw que não for finito é ignorado e o dino continua olhando pra onde estava.
+					var new_yaw := float(parts[3]) if parts.size() >= 4 else d.yaw
+					if is_finite(new_yaw):
+						d.yaw = wrapf(new_yaw, -PI, PI)
 					d.pos = p
 					d.client_seq += 1
 					Net.s_teleport.rpc_id(peer_id, d.client_seq, d.pos, d.yaw)
@@ -525,7 +536,8 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 				elif types.has(kind):
 					var defaults := {"sangramento": GameConfig.BLEED_S, "fratura": GameConfig.FRACTURE_S, "funda": GameConfig.DEEP_S}
 					var secs := float(parts[2]) if parts.size() > 2 else float(defaults[kind])
-					Injuries.set_remaining(d, types[kind], secs)
+					# No máximo um dia: "1e999" é infinito e o ferimento nunca mais sarava.
+					Injuries.set_remaining(d, types[kind], clampf(secs, 0.0, DEV_HURT_MAX_S))
 					reply = "Ferimentos: " + (Injuries.describe(d.injuries) if not d.injuries.is_empty() else "nenhum")
 				else:
 					reply = "Uso: /hurt sangramento|fratura|funda|nada [segundos]"
@@ -548,7 +560,7 @@ func _dev_command(peer_id: int, d: Dino, text: String) -> void:
 					var side := d.forward().cross(Vector3.UP) * sim.rng.randf_range(-6.0, 6.0)
 					var p := sim.terrain.clamp_to_play_area(d.pos + d.forward() * (8.0 + Species.length_m(sp_id) * 0.6) + side)
 					b.pos = Vector3(p.x, Movement.ground_y(sim.terrain, p.x, p.z, b.body_height()), p.z)
-					b.yaw = d.yaw + PI
+					b.yaw = wrapf(d.yaw + PI, -PI, PI)
 					reply = "%s criado na sua frente" % Species.display_name(sp_id)
 			"/nest", "/eggs", "/hatch":
 				reply = _dev_nest(d, cmd, parts)

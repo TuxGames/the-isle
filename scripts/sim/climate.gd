@@ -43,6 +43,8 @@ var terrain: Terrain
 var overrides: Array = []
 ## Quantos trechos forçados guarda (os mais velhos saem antes).
 const MAX_OVERRIDES := 16
+## Maior salto de um "+N" do /time (dev), em anos de mundo.
+const SPAN_MAX_YEARS := 100.0
 
 ## Altura das margens do rio a cada BANK_STEP de z, e até que altura de margem o rio nunca congela.
 var _bank_h := PackedFloat32Array()
@@ -648,14 +650,17 @@ func skip_target(t: float, words: PackedStringArray) -> Dictionary:
 	return {"t": target}
 
 
-## "2", "2h", "30m", "30min", "3d" → segundos de mundo; -1 se não entender.
+## "2", "2h", "30m", "30min", "3d" → segundos de mundo; -1 se não entender ou se passar de
+## SPAN_MAX_YEARS ("1e999" é um float válido e dá infinito: o tempo do mundo ia junto, pro save).
 static func _parse_span(w: String) -> float:
 	var units := {"min": 60.0, "m": 60.0, "h": 3600.0, "d": GameConfig.DAY_S, "": 3600.0}
 	for suffix in ["min", "m", "h", "d", ""]:
 		if w.ends_with(suffix):
 			var num := w.substr(0, w.length() - suffix.length())
-			if num.is_valid_float() and num.to_float() > 0.0:
-				return num.to_float() * float(units[suffix])
+			if num.is_valid_float():
+				var span := num.to_float() * float(units[suffix])
+				if span > 0.0 and span <= SPAN_MAX_YEARS * year_s():
+					return span
 	return -1.0
 
 
