@@ -12,7 +12,10 @@
 #  7. bob morre e renasce jovem.
 #     (depois: troca de senha, códigos de resgate, o faro: fred deixa pegadas, gil fareja;
 #     e a reprodução: hana faz ninho, postura com um bot, choca e nasce no ninho;
-#     e o clima: ivo pula pro inverno e o cliente calcula a mesma neve que o servidor.)
+#     e o clima: ivo pula pro inverno e o cliente calcula a mesma neve que o servidor;
+#     e os números não finitos: zoe manda c_state com NaN e com infinito (e um /tp com yaw
+#     infinito) enquanto o yuri olha os snapshots: ela não sai do lugar, nada não finito chega
+#     nos clientes nem vai pro save.)
 #  8-10. mapa de 1024 m: o cliente recebe o tamanho; reiniciar sem --map-size mantém o do
 #        save; reiniciar com outro tamanho guarda o save antigo à parte.
 set -u
@@ -69,7 +72,19 @@ client rastro || FAILS=$((FAILS+1))   # fred anda 30 m e sai (as pegadas ficam)
 client fareja || FAILS=$((FAILS+1))   # gil fareja: vê as pegadas do fred, não as próprias; recarga
 client ninho || FAILS=$((FAILS+1))    # hana: ninho (N), postura com bot (R), ovos, choco e nasce no ninho
 client clima || FAILS=$((FAILS+1))    # ivo:  inverno e nevasca; o cliente calcula o mesmo clima
+client nan_observa & YURI=$!          # yuri: olha os snapshots enquanto a zoe manda NaN
+client nan_envia || FAILS=$((FAILS+1)) # zoe:  c_state com NaN e infinito; /tp com yaw infinito
+wait $YURI || FAILS=$((FAILS+1))
 stop_server
+
+# A zoe saiu ainda mandando NaN. O JSON grava NaN como null e infinito como 1e99999: nenhum dos
+# dois pode aparecer no save (o servidor grava em toda saída e ao fechar).
+if [ -s "$SAVE" ] && ! grep -qE 'null|1e99999' "$SAVE"; then
+  echo "TEST PASS: [servidor] nenhum número não finito no save"
+else
+  echo "TEST FAIL: [servidor] número não finito (null ou 1e99999) no save $SAVE"
+  FAILS=$((FAILS+1))
+fi
 
 # Mapa de outro tamanho, num save à parte:
 #  8. o servidor sobe com --map-size=1024 e o cliente monta o mesmo mapa;

@@ -31,6 +31,11 @@ extends Node
 ##               (/weather), vai pra um morro e confere que calcula aqui (Climate, com a semente e
 ##               o tempo do mundo) a mesma estação, tempo e neve que o servidor (/clima), e que
 ##               corre menos na neve (ST_SPRINT) sem andar mais devagar.
+##   nan_envia   entra como zoe e manda c_state com NaN e com infinito (posição e yaw) e um /tp
+##               com yaw infinito: no snapshot ela continua no mesmo lugar, só com números
+##               finitos, e a posição boa seguinte vale. Sai ainda mandando NaN.
+##   nan_observa entra como yuri, ao mesmo tempo, e confere em todo snapshot que não chega nenhum
+##               número não finito e que a zoe não saiu do lugar.
 ##
 ## Cada nome entra com a senha "senha-<nome>" (só a chave dela viaja, como no jogo).
 
@@ -110,6 +115,10 @@ func _on_connected() -> void:
 		pname = "hana"
 	elif role == "clima":
 		pname = "ivo"
+	elif role == "nan_envia":
+		pname = "zoe"
+	elif role == "nan_observa":
+		pname = "yuri"
 	var password := "chute-errado" if role == "intruso" else "senha-" + pname
 	if role == "dani_nova":
 		password = "nova-dani"
@@ -144,6 +153,10 @@ func _on_connected() -> void:
 			_ninho()
 		"clima":
 			_clima()
+		"nan_envia":
+			_nan_envia()
+		"nan_observa":
+			_nan_observa()
 
 
 func _on_login_failed(reason: String) -> void:
@@ -729,4 +742,101 @@ func _clima() -> void:
 	_check(absf(stats[Net.ST_SPRINT] / sprint0 - want) < 0.01,
 			"corre a %.0f%% na neve (%.2f → %.2f m/s)" % [want * 100.0, sprint0, stats[Net.ST_SPRINT]])
 	_check(absf(stats[Net.ST_WALK] - walk0) < 0.01, "anda igual (%.2f m/s)" % stats[Net.ST_WALK])
+	_finish()
+
+
+## Números não finitos vindos do cliente: o servidor ignora o c_state inteiro (o clampf devolve
+## NaN quando recebe NaN e o wrapf de infinito dá NaN) e o dino fica onde estava. Este cliente
+## manda a posição dele 20x por segundo no _process, então basta trocar my_pos / my_yaw.
+func _nan_envia() -> void:
+	if not await _wait_for(func(): return my_seq > 0 and entities.has(my_id), 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _wait_for(func(): return _id_of("yuri") != 0, 20.0):
+		_fail("o yuri não apareceu")
+		return _finish()
+	await _wait(0.5)   # o yuri vê a zoe parada antes de começar
+	var good := [my_pos, my_yaw]   # último lugar bom (lista: o in_place abaixo vê as mudanças)
+	# O que o servidor diz de mim no snapshot: finito e no último lugar bom?
+	var in_place := func() -> bool:
+		if not entities.has(my_id):
+			return false
+		var p: Vector3 = entities[my_id][0]
+		var yaw: float = entities[my_id][1]
+		return p.is_finite() and is_finite(yaw) and Movement.flat_distance(p, good[0]) < 0.05
+
+	for c in [["posição NaN", Vector3(NAN, 0.0, NAN), good[1]], ["posição infinita", Vector3(INF, 0.0, -INF), good[1]],
+			["yaw NaN", good[0], NAN], ["yaw infinito", good[0], INF]]:
+		my_pos = c[1]
+		my_yaw = c[2]
+		await _wait(0.6)
+		_check(in_place.call(), "c_state com %s: no snapshot continua no mesmo lugar, com números finitos" % c[0])
+
+	# O servidor não desistiu desse jogador: a posição boa seguinte vale.
+	good[0] = good[0] + Vector3(3.0, 0.0, 0.0)
+	my_pos = good[0]
+	my_yaw = good[1]
+	_check(await _wait_for(in_place, 3.0), "a posição boa seguinte é aceita")
+
+	# /tp com yaw infinito ("1e999" vira infinito no float): vai pro lugar e o yaw fica como estava.
+	var seq0 := my_seq
+	_dev("/tp %d %d 1e999" % [roundi(good[0].x), roundi(good[0].z)])
+	var arrived := await _wait_for(func(): return my_seq > seq0, 5.0)
+	_check(arrived and my_pos.is_finite() and is_finite(my_yaw),
+			"/tp com yaw infinito: o servidor manda posição e yaw finitos (%s, yaw %s)" % [my_pos, my_yaw])
+	# E um yaw finito fora da faixa volta pra -PI a PI.
+	seq0 = my_seq
+	_dev("/tp %d %d 10" % [roundi(good[0].x), roundi(good[0].z)])
+	arrived = await _wait_for(func(): return my_seq > seq0, 5.0)
+	_check(arrived and absf(my_yaw - wrapf(10.0, -PI, PI)) < 0.001, "/tp com yaw 10: fica entre -PI e PI (%.3f)" % my_yaw)
+	if not my_pos.is_finite() or not is_finite(my_yaw):
+		return _finish()
+	good[0] = my_pos   # muda a lista (não troca): o in_place acima enxerga
+	good[1] = my_yaw
+	_check(await _wait_for(in_place, 3.0), "depois do /tp o snapshot mostra o lugar novo")
+
+	# Sai ainda mandando NaN: o que vai pro save é o último lugar bom (o net_test.sh olha o arquivo).
+	my_pos = Vector3(NAN, NAN, NAN)
+	my_yaw = NAN
+	await _wait(0.6)
+	_check(in_place.call(), "saindo ainda com NaN: continua no último lugar bom")
+	Net.c_action.rpc_id(1, Net.Action.CHAT, "nan-acabou")
+	await _wait(0.4)
+	_finish()
+
+
+## Do lado de quem só olha: nenhum snapshot traz número não finito e a zoe não sai do lugar
+## (posição infinita, antes da correção, jogava o dino pro canto do mapa).
+func _nan_observa() -> void:
+	var seen := {"snapshots": 0, "bad": 0, "zoe": 0, "far": 0.0}
+	var first: Array = []   # primeira posição da zoe
+	var messages: Array = []
+	Net.message_received.connect(func(text): messages.append(text))
+	# Roda depois do _on_snapshot (ligado antes, no run): `entities` já é o deste snapshot.
+	var watch := func(data: PackedFloat32Array) -> void:
+		seen["snapshots"] += 1
+		for f in data:
+			if not is_finite(f):
+				seen["bad"] += 1
+		var zid := _id_of("zoe")
+		if zid == 0 or not entities.has(zid):
+			return
+		seen["zoe"] += 1
+		var zp: Vector3 = entities[zid][0]
+		if zp.is_finite():
+			if first.is_empty():
+				first.append(zp)
+			seen["far"] = maxf(seen["far"], Movement.flat_distance(zp, first[0]))
+	Net.snapshot_received.connect(watch)
+	if not await _wait_for(func(): return my_seq > 0, 10.0):
+		_fail("não recebeu a posição")
+		return _finish()
+	if not await _wait_for(func(): return messages.any(func(m): return String(m).contains("zoe: nan-acabou")), 45.0):
+		_fail("a zoe não avisou que acabou (viu ela em %d snapshots)" % seen["zoe"])
+		return _finish()
+	_check(seen["zoe"] >= 20, "viu a zoe enquanto ela mandava NaN (%d snapshots)" % seen["zoe"])
+	_check(seen["bad"] == 0, "nenhum número não finito nos snapshots (%d snapshots, %d números ruins)" % [
+			seen["snapshots"], seen["bad"]])
+	# Ela só anda 3 m e dá um /tp pro metro mais perto.
+	_check(seen["far"] < 6.0, "a zoe não saiu do lugar (se afastou no máximo %.1f m)" % seen["far"])
 	_finish()
